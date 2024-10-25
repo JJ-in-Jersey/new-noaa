@@ -195,10 +195,11 @@ if __name__ == '__main__':
     for index, row in station_frame.iterrows():
         print(f'Downloading current data for {row['id']}')
         wp_folder = stations_folder.joinpath(row['id'])
-        downloaded_velocity = SixteenMonths(2024, row['id']).frame
-        print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
-        if row['type'] == 'H':
-            copyfile(wp_folder.joinpath('downloaded_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
-        elif row['type'] == 'S':
-            print_file_exists(write_df(CubicSplineVelocityFrame(downloaded_velocity).frame, wp_folder.joinpath('cubic_spline_frame.csv')))
-            copyfile(wp_folder.joinpath('cubic_spline_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
+        if row['type'] != "W":
+            downloaded_velocity = SixteenMonths(2024, row['id']).frame
+            print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
+            if row['type'] == 'H':
+                copyfile(wp_folder.joinpath('downloaded_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
+            elif row['type'] == 'S':
+                print_file_exists(write_df(CubicSplineVelocityFrame(downloaded_velocity).frame, wp_folder.joinpath('cubic_spline_frame.csv')))
+                copyfile(wp_folder.joinpath('cubic_spline_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
