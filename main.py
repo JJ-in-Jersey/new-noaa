@@ -202,6 +202,7 @@ if __name__ == '__main__':
         wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
         cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
 
+        downloaded_velocity = read_df(downloaded_file)
         if not downloaded_velocity['timestamp'].is_monotonic_increasing:
             print(f'{row['id']} timestamps are not monotonically increasing')
             # for r in range(0, len(downloaded_velocity) - 1):
