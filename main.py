@@ -1,3 +1,4 @@
+import time
 from datetime import datetime as dt
 from scipy.interpolate import CubicSpline
 from pathlib import Path
@@ -121,10 +122,13 @@ class OneMonth:
                 break
             except requests.exceptions.RequestException as e:
                 print(str(e))
+                time.sleep(1)
             except DataNotAvailable as e:
                 print(str(e))
+                time.sleep(1)
             except EmptyDataframe as e:
                 print(str(e))
+                time.sleep(1)
 
 
 class SixteenMonths:
@@ -164,9 +168,11 @@ def currents_fetch_stations():
                         break
                     except requests.exceptions.RequestException as e:
                         print(str(e))
+                        time.sleep(1)
             break
         except requests.exceptions.RequestException as e:
             print(str(e))
+            time.sleep(1)
 
     return pd.DataFrame(rows)
 
