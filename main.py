@@ -24,7 +24,6 @@ class CurrentWaypoint:
         tree.find('wpt')['lat'] = wp_row['lat']
         tree.find('wpt')['lon'] = wp_row['lng']
 
-
         if wp_row['type'] == 'S':  # subordinate
             tree.find('sym').string = 'Symbol-Pin-Green'
         elif wp_row['type'] == 'H':  # harmonic
@@ -70,14 +69,20 @@ class CubicSplineVelocityFrame:
 
 
 class DataNotAvailable(Exception):
-    def __init__(self):
-        self.message = 'Currents predictions are not available from the requested station.'
+    def __init__(self, station_id: str):
+        self.message = 'Currents predictions are not available from ' + station_id
+        super().__init__(self.message)
+
+
+class EmptyDataframe(Exception)
+    def __init__(self, station_id: str):
+        self.message = station_id + " dataframe is empty or all NaN"
         super().__init__(self.message)
 
 
 class OneMonth:
 
-    def __init__(self, month: int, year: int, station_code: str, station_bin: int = None, interval_time: int = 1):
+    def __init__(self, month: int, year: int, station_id: str, station_bin: int = None, interval_time: int = 1):
 
         self.frame = None
         if month < 1 or month > 12:
@@ -90,7 +95,7 @@ class OneMonth:
         header = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?"
         begin_date = "&begin_date=" + start.strftime("%Y%m%d")  # yyyymmdd
         end_date = "&end_date=" + end.strftime("%Y%m%d")  # yyyymmdd
-        station = "&station=" + station_code  # station code string
+        station = "&station=" + station_id  # station id string
 
         interval = "&interval=" + str(interval_time)
         if station_bin is not None:
@@ -104,9 +109,11 @@ class OneMonth:
                 my_response = requests.get(my_request)
                 my_response.raise_for_status()
                 if 'predictions are not available' in my_response.content.decode():
-                    raise SystemExit(f'{station} {bin_no} Predictions are not available')
+                    raise DataNotAvailable(station_id)
 
                 frame = pd.read_csv(StringIO(my_response.content.decode()))
+                if frame.empty or frame.isna().all().all():
+                    raise EmptyDataframe(station_id)
                 self.frame = frame.rename(columns={heading: heading.strip() for heading in frame.columns.tolist()})
                 self.frame.rename(columns={'Velocity_Major': 'velocity'}, inplace=True)
                 self.frame['datetime'] = pd.to_datetime(frame['Time'])
@@ -117,14 +124,13 @@ class OneMonth:
 
 
 class SixteenMonths:
-
     def __init__(self, year: int, station_code: str, station_bin: int = None):
-
         self.frame = None
         frames = ([OneMonth(month, year - 1, station_code, station_bin).frame for month in range(11, 13)] +
                   [OneMonth(month, year, station_code, station_bin).frame for month in range(1, 13)] +
                   [OneMonth(month, year + 1, station_code, station_bin).frame for month in range(1, 3)])
         self.frame = pd.concat(frames, axis=0, ignore_index=True)
+
 
 
 def currents_fetch_stations():
