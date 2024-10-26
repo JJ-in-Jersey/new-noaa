@@ -111,6 +111,7 @@ class OneMonth:
                 self.frame.rename(columns={'Velocity_Major': 'velocity'}, inplace=True)
                 self.frame['datetime'] = pd.to_datetime(frame['Time'])
                 self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
+                break
             except requests.exceptions.RequestException as e:
                 print(f'request error: e')
 
@@ -150,9 +151,10 @@ def currents_fetch_stations():
                         if bin_count and bins_tree.find('Bin').find('depth') is not None:
                             bin_dict = {int(tag.num.text): float(tag.depth.text) for tag in bins_tree.find_all('Bin')}
                             wp_row['min_bin'] = min(bin_dict, key=bin_dict.get)
+                        break
                     except requests.exceptions.RequestException as e:
                         print(f'request error: e')
-
+            break
         except requests.exceptions.RequestException as e:
             print(f'request error: e')
 
