@@ -1,14 +1,12 @@
 from datetime import datetime as dt
-from pathlib import Path
 from scipy.interpolate import CubicSpline
-
+from pathlib import Path
 import pandas as pd
 import requests
 from io import StringIO
 from os import mkdir
 from shutil import copyfile
 
-from six import print_
 from tt_file_tools.file_tools import SoupFromXMLResponse, SoupFromXMLFile, write_df, read_df, print_file_exists
 
 from dateutil.relativedelta import relativedelta
@@ -44,19 +42,7 @@ class CurrentWaypoint:
         desc_tag.string = wp_row['id'] + ' - ' + str(int(wp_row['min_bin'])) + ' - ' + wp_row['type'] if bool(pd.isna(wp_row)['min_bin']) is False else wp_row['id'] + ' - ' + wp_row['type']
         tree.find('name').insert_after(desc_tag)
 
-
         self.soup = tree
-
-
-class TimeTables:
-
-    def __init__(self, year):
-
-        start = dt(year-1, 11, 1)
-        end = dt(year+1, 3, 1)
-        # minutes = int((end - start).total_seconds()/60)
-        for m in range(int(start.timestamp()), int(end.timestamp())):
-            print(dt.fromtimestamp(m))
 
 
 class CubicSplineVelocityFrame:
@@ -64,7 +50,10 @@ class CubicSplineVelocityFrame:
     def __init__(self, frame: pd.DataFrame):
 
         self.frame = None
-        if 'datetime' in frame.columns.tolist() and 'timestamp' in frame.columns.tolist() and 'velocity' in frame.columns.tolist():
+
+        if not downloaded_velocity['timestamp'].is_monotonic_increasing:
+            raise SystemExit(f'frame is not monotonically increasing')
+        elif 'datetime' in frame.columns.tolist() and 'timestamp' in frame.columns.tolist() and 'velocity' in frame.columns.tolist():
             cs = CubicSpline(frame['timestamp'], frame['velocity'])
             start_date = frame['datetime'].iloc[0].date()
             start_date = dt.combine(start_date, dt.min.time())
@@ -195,11 +184,32 @@ if __name__ == '__main__':
     for index, row in station_frame.iterrows():
         print(f'Downloading current data for {row['id']}')
         wp_folder = stations_folder.joinpath(row['id'])
+        downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
+        wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
+        cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
+
         if row['type'] != "W":
-            downloaded_velocity = SixteenMonths(2024, row['id']).frame
-            print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
-            if row['type'] == 'H':
-                copyfile(wp_folder.joinpath('downloaded_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
-            elif row['type'] == 'S':
-                print_file_exists(write_df(CubicSplineVelocityFrame(downloaded_velocity).frame, wp_folder.joinpath('cubic_spline_frame.csv')))
+            if not print_file_exists(downloaded_file):
+                downloaded_velocity = SixteenMonths(2024, row['id']).frame
+                print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
+            else:
+                downloaded_velocity = read_df(downloaded_file)
+
+    for index, row in station_frame.iterrows():
+        print(f'Checking {row['id']} station type (H/S)')
+        wp_folder = stations_folder.joinpath(row['id'])
+        downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
+        wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
+        cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
+
+        if not downloaded_velocity['timestamp'].is_monotonic_increasing:
+            print(f'{row['id']} timestamps are not monotonically increasing')
+            # for r in range(0, len(downloaded_velocity) - 1):
+            #     if downloaded_velocity.loc[r]['timestamp'] >= downloaded_velocity.loc[r + 1]['timestamp']:
+            #         print(f'Check value in row {r}')
+        elif row['type'] == 'H':
+            copyfile(wp_folder.joinpath('downloaded_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
+        elif row['type'] == 'S':
+            if not print_file_exists(cubic_file):
+                print_file_exists(write_df(CubicSplineVelocityFrame(read_df(wp_folder.joinpath('downloaded_frame.csv'))).frame, wp_folder.joinpath('cubic_spline_frame.csv')))
                 copyfile(wp_folder.joinpath('cubic_spline_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
