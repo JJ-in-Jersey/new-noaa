@@ -120,7 +120,7 @@ class OneMonth:
                 self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
                 break
             except requests.exceptions.RequestException as e:
-                print(f'request error: e')
+                print(str(e))
 
 
 class SixteenMonths:
@@ -159,10 +159,10 @@ def currents_fetch_stations():
                             wp_row['min_bin'] = min(bin_dict, key=bin_dict.get)
                         break
                     except requests.exceptions.RequestException as e:
-                        print(f'request error: e')
+                        print(str(e))
             break
         except requests.exceptions.RequestException as e:
-            print(f'request error: e')
+            print(str(e))
 
     return pd.DataFrame(rows)
 
