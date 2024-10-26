@@ -202,19 +202,18 @@ if __name__ == '__main__':
                 file.write(str(wp.soup))
 
     for index, row in station_frame.iterrows():
-        if '#' not in row['id']:
+        if '#' not in row['id'] and row['type'] != 'W':
             print(f'Downloading current data for {row['id']}')
             wp_folder = stations_folder.joinpath(row['id'])
             downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
             wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
             cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
 
-            if row['type'] != "W":
-                if not print_file_exists(downloaded_file):
-                    downloaded_velocity = SixteenMonths(2024, row['id']).frame
-                    print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
-                else:
-                    downloaded_velocity = read_df(downloaded_file)
+            if not print_file_exists(downloaded_file):
+                downloaded_velocity = SixteenMonths(2024, row['id']).frame
+                print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
+            else:
+                downloaded_velocity = read_df(downloaded_file)
 
     for index, row in station_frame.iterrows():
         if '#' not in row['id']:
