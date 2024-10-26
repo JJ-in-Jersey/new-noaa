@@ -129,29 +129,32 @@ class SixteenMonths:
 def currents_fetch_stations():
 
     my_request = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.xml?type=currentpredictions&units=english"
-    my_response = requests.get(my_request)
-
-    if my_response.status_code != 200:
-        raise SystemExit(f'stations request failed')
-    else:
-        print(f'Creating rows')
-        stations_tree = SoupFromXMLResponse(StringIO(my_response.content.decode())).tree
-        rows = [{'id': station.find_next('id').text, 'name': station.find_next('name').text, 'lat': float(station.find_next('lat').text),
-                 'lng': float(station.find_next('lng').text), 'type': station.find_next('type').text} for station in stations_tree.find_all('Station')]
-
-        for wp_row in rows:
-            my_request = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/" + wp_row['id'] + "/bins.xml?units=english"
+    for _ in range(3):
+        try:
             my_response = requests.get(my_request)
+            my_response.raise_for_status()
+            print(f'Creating rows')
+            stations_tree = SoupFromXMLResponse(StringIO(my_response.content.decode())).tree
+            rows = [{'id': station.find_next('id').text, 'name': station.find_next('name').text, 'lat': float(station.find_next('lat').text),
+                     'lng': float(station.find_next('lng').text), 'type': station.find_next('type').text} for station in stations_tree.find_all('Station')]
 
-            if my_response.status_code != 200:
-                raise SystemExit(f'bin request failed')
-            else:
-                print(f'Creating bins {wp_row['id']}')
-                bins_tree = SoupFromXMLResponse(StringIO(my_response.content.decode())).tree
-                bin_count = int(bins_tree.find("nbr_of_bins").text)
-                if bin_count and bins_tree.find('Bin').find('depth') is not None:
-                    bin_dict = {int(tag.num.text): float(tag.depth.text) for tag in bins_tree.find_all('Bin')}
-                    wp_row['min_bin'] = min(bin_dict, key=bin_dict.get)
+            for wp_row in rows:
+                my_request = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/" + wp_row['id'] + "/bins.xml?units=english"
+                for _ in range(3):
+                    try:
+                        my_response = requests.get(my_request)
+                        my_response.raise_for_status()
+                        print(f'Creating bins {wp_row['id']}')
+                        bins_tree = SoupFromXMLResponse(StringIO(my_response.content.decode())).tree
+                        bin_count = int(bins_tree.find("nbr_of_bins").text)
+                        if bin_count and bins_tree.find('Bin').find('depth') is not None:
+                            bin_dict = {int(tag.num.text): float(tag.depth.text) for tag in bins_tree.find_all('Bin')}
+                            wp_row['min_bin'] = min(bin_dict, key=bin_dict.get)
+                    except requests.exceptions.RequestException as e:
+                        print(f'request error: e')
+
+        except requests.exceptions.RequestException as e:
+            print(f'request error: e')
 
     return pd.DataFrame(rows)
 
