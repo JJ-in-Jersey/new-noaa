@@ -69,12 +69,17 @@ class CubicSplineVelocityFrame:
             raise SystemExit(f'frame does not contain datetime, timestamp or velocity')
 
 
+class DataNotAvailable(Exception):
+    def __init__(self):
+        self.message = 'Currents predictions are not available from the requested station.'
+        super().__init__(self.message)
+
+
 class OneMonth:
 
     def __init__(self, month: int, year: int, station_code: str, station_bin: int = None, interval_time: int = 1):
 
         self.frame = None
-
         if month < 1 or month > 12:
             raise ValueError
 
@@ -93,18 +98,21 @@ class OneMonth:
         footer = "&product=currents_predictions&time_zone=lst_ldt" + interval + "&units=english&format=csv" + bin_no
 
         my_request = header + begin_date + end_date + station + footer
-        my_response = requests.get(my_request)
 
-        if my_response.status_code != 200:
-            raise SystemExit(f'{station} request failed')
-        elif my_response.content.decode() == 'Currents predictions are not available from the requested station.':
-            raise SystemExit(f'{station} predictions are not available')
-        else:
-            frame = pd.read_csv(StringIO(my_response.content.decode()))
-            self.frame = frame.rename(columns={heading: heading.strip() for heading in frame.columns.tolist()})
-            self.frame.rename(columns={'Velocity_Major': 'velocity'}, inplace=True)
-            self.frame['datetime'] = pd.to_datetime(frame['Time'])
-            self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
+        for _ in range(3):
+            try:
+                my_response = requests.get(my_request)
+                my_response.raise_for_status()
+                if 'predictions are not available' in my_response.content.decode():
+                    raise SystemExit(f'{station} {bin_no} Predictions are not available')
+
+                frame = pd.read_csv(StringIO(my_response.content.decode()))
+                self.frame = frame.rename(columns={heading: heading.strip() for heading in frame.columns.tolist()})
+                self.frame.rename(columns={'Velocity_Major': 'velocity'}, inplace=True)
+                self.frame['datetime'] = pd.to_datetime(frame['Time'])
+                self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
+            except requests.exceptions.RequestException as e:
+                print(f'request error: e')
 
 
 class SixteenMonths:
@@ -172,45 +180,48 @@ if __name__ == '__main__':
 
     print(f'Creating all the NOAA waypoint folders and files')
     for index, row in station_frame.iterrows():
-        wp_folder = stations_folder.joinpath(row['id'])
-        if not wp_folder.exists():
-            mkdir(wp_folder)
-        wp = CurrentWaypoint(row)
-        with open(wp_folder.joinpath(row['id'] + '.gpx'), "w") as file:
-            file.write(str(wp.soup))
-        with open(OpenCPN_folder.joinpath(row['id'] + '.gpx'), "w") as file:
-            file.write(str(wp.soup))
+        if '#' not in row['id']:
+            wp_folder = stations_folder.joinpath(row['id'])
+            if not wp_folder.exists():
+                mkdir(wp_folder)
+            wp = CurrentWaypoint(row)
+            with open(wp_folder.joinpath(row['id'] + '.gpx'), "w") as file:
+                file.write(str(wp.soup))
+            with open(OpenCPN_folder.joinpath(row['id'] + '.gpx'), "w") as file:
+                file.write(str(wp.soup))
 
     for index, row in station_frame.iterrows():
-        print(f'Downloading current data for {row['id']}')
-        wp_folder = stations_folder.joinpath(row['id'])
-        downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
-        wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
-        cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
+        if '#' not in row['id']:
+            print(f'Downloading current data for {row['id']}')
+            wp_folder = stations_folder.joinpath(row['id'])
+            downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
+            wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
+            cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
 
-        if row['type'] != "W":
-            if not print_file_exists(downloaded_file):
-                downloaded_velocity = SixteenMonths(2024, row['id']).frame
-                print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
-            else:
-                downloaded_velocity = read_df(downloaded_file)
+            if row['type'] != "W":
+                if not print_file_exists(downloaded_file):
+                    downloaded_velocity = SixteenMonths(2024, row['id']).frame
+                    print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
+                else:
+                    downloaded_velocity = read_df(downloaded_file)
 
     for index, row in station_frame.iterrows():
-        print(f'Checking {row['id']} station type (H/S)')
-        wp_folder = stations_folder.joinpath(row['id'])
-        downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
-        wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
-        cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
+        if '#' not in row['id']:
+            print(f'Checking {row['id']} station type (H/S)')
+            wp_folder = stations_folder.joinpath(row['id'])
+            downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
+            wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
+            cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
 
-        downloaded_velocity = read_df(downloaded_file)
-        if not downloaded_velocity['timestamp'].is_monotonic_increasing:
-            print(f'{row['id']} timestamps are not monotonically increasing')
-            # for r in range(0, len(downloaded_velocity) - 1):
-            #     if downloaded_velocity.loc[r]['timestamp'] >= downloaded_velocity.loc[r + 1]['timestamp']:
-            #         print(f'Check value in row {r}')
-        elif row['type'] == 'H':
-            copyfile(wp_folder.joinpath('downloaded_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
-        elif row['type'] == 'S':
-            if not print_file_exists(cubic_file):
-                print_file_exists(write_df(CubicSplineVelocityFrame(read_df(wp_folder.joinpath('downloaded_frame.csv'))).frame, wp_folder.joinpath('cubic_spline_frame.csv')))
-                copyfile(wp_folder.joinpath('cubic_spline_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
+            downloaded_velocity = read_df(downloaded_file)
+            if not downloaded_velocity['timestamp'].is_monotonic_increasing:
+                print(f'{row['id']} timestamps are not monotonically increasing')
+                # for r in range(0, len(downloaded_velocity) - 1):
+                #     if downloaded_velocity.loc[r]['timestamp'] >= downloaded_velocity.loc[r + 1]['timestamp']:
+                #         print(f'Check value in row {r}')
+            elif row['type'] == 'H':
+                copyfile(wp_folder.joinpath('downloaded_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
+            elif row['type'] == 'S':
+                if not print_file_exists(cubic_file):
+                    print_file_exists(write_df(CubicSplineVelocityFrame(read_df(wp_folder.joinpath('downloaded_frame.csv'))).frame, wp_folder.joinpath('cubic_spline_frame.csv')))
+                    copyfile(wp_folder.joinpath('cubic_spline_frame.csv'), wp_folder.joinpath('waypoint_velocity_frame.csv'))
