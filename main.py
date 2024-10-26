@@ -74,7 +74,7 @@ class DataNotAvailable(Exception):
         super().__init__(self.message)
 
 
-class EmptyDataframe(Exception)
+class EmptyDataframe(Exception):
     def __init__(self, station_id: str):
         self.message = station_id + " dataframe is empty or all NaN"
         super().__init__(self.message)
