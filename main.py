@@ -121,6 +121,10 @@ class OneMonth:
                 break
             except requests.exceptions.RequestException as e:
                 print(str(e))
+            except DataNotAvailable as e:
+                print(str(e))
+            except EmptyDataframe as e:
+                print(str(e))
 
 
 class SixteenMonths:
