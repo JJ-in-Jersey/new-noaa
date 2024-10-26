@@ -222,8 +222,6 @@ if __name__ == '__main__':
             if not print_file_exists(downloaded_file):
                 downloaded_velocity = SixteenMonths(2024, row['id']).frame
                 print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
-            else:
-                downloaded_velocity = read_df(downloaded_file)
 
     for index, row in station_frame.iterrows():
         if '#' not in row['id']:
