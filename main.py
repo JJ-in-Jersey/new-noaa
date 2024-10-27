@@ -134,11 +134,16 @@ class OneMonth:
 class SixteenMonths:
     def __init__(self, year: int, station_code: str, station_bin: int = None):
         self.frame = None
-        frames = ([OneMonth(month, year - 1, station_code, station_bin).frame for month in range(11, 13)] +
-                  [OneMonth(month, year, station_code, station_bin).frame for month in range(1, 13)] +
-                  [OneMonth(month, year + 1, station_code, station_bin).frame for month in range(1, 3)])
+        months = ([OneMonth(month, year - 1, station_code, station_bin) for month in range(11, 13)] +
+                  [OneMonth(month, year, station_code, station_bin) for month in range(1, 13)] +
+                  [OneMonth(month, year + 1, station_code, station_bin) for month in range(1, 3)])
+        frames = [m.frame for m in months]
         self.frame = pd.concat(frames, axis=0, ignore_index=True)
 
+        for f in frames:
+            del f
+        for m in months:
+            del m
 
 
 def currents_fetch_stations():
