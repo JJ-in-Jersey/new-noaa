@@ -51,9 +51,10 @@ class CubicSplineVelocityFrame:
 
         self.frame = None
 
-        if not downloaded_velocity['timestamp'].is_monotonic_increasing:
-            raise SystemExit(f'frame is not monotonically increasing')
-        elif 'datetime' in frame.columns.tolist() and 'timestamp' in frame.columns.tolist() and 'velocity' in frame.columns.tolist():
+        frame['datetime'] = pd.to_datetime(frame['Time'])
+        frame['timestamp'] = frame['datetime'].apply(dt.timestamp).astype('int')
+
+        if frame['timestamp'].is_monotonic_increasing:
             cs = CubicSpline(frame['timestamp'], frame['velocity'])
             start_date = frame['datetime'].iloc[0].date()
             start_date = dt.combine(start_date, dt.min.time())
@@ -66,7 +67,7 @@ class CubicSplineVelocityFrame:
             self.frame['velocity'] = self.frame['timestamp'].apply(cs)
             self.frame['velocity'] = self.frame['velocity'].round(2)
         else:
-            raise SystemExit(f'frame does not contain datetime, timestamp or velocity')
+            raise SystemExit(f'frame is not monotonically increasing')
 
 
 class DataNotAvailable(Exception):
@@ -97,12 +98,10 @@ class OneMonth:
         begin_date = "&begin_date=" + start.strftime("%Y%m%d")  # yyyymmdd
         end_date = "&end_date=" + end.strftime("%Y%m%d")  # yyyymmdd
         station = "&station=" + station_id  # station id string
-
         interval = "&interval=" + str(interval_time)
         if station_bin is not None:
             bin_no = "&bin=" + str(station_bin)
         footer = "&product=currents_predictions&time_zone=lst_ldt" + interval + "&units=english&format=csv" + bin_no
-
         my_request = header + begin_date + end_date + station + footer
 
         for _ in range(3):
@@ -111,14 +110,11 @@ class OneMonth:
                 my_response.raise_for_status()
                 if 'predictions are not available' in my_response.content.decode():
                     raise DataNotAvailable(station_id)
-
                 frame = pd.read_csv(StringIO(my_response.content.decode()))
                 if frame.empty or frame.isna().all().all():
                     raise EmptyDataframe(station_id)
                 self.frame = frame.rename(columns={heading: heading.strip() for heading in frame.columns.tolist()})
                 self.frame.rename(columns={'Velocity_Major': 'velocity'}, inplace=True)
-                self.frame['datetime'] = pd.to_datetime(frame['Time'])
-                self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
                 break
             except requests.exceptions.RequestException as e:
                 print(str(e))
@@ -154,10 +150,11 @@ def currents_fetch_stations():
         try:
             my_response = requests.get(my_request)
             my_response.raise_for_status()
-            print(f'Creating rows')
+            print(f'Requesting list of stations')
             stations_tree = SoupFromXMLResponse(StringIO(my_response.content.decode())).tree
             rows = [{'id': station.find_next('id').text, 'name': station.find_next('name').text, 'lat': float(station.find_next('lat').text),
                      'lng': float(station.find_next('lng').text), 'type': station.find_next('type').text} for station in stations_tree.find_all('Station')]
+            rows = pd.DataFrame(rows).drop_duplicates().to_dict('records')
 
             for wp_row in rows:
                 my_request = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/" + wp_row['id'] + "/bins.xml?units=english"
@@ -165,7 +162,7 @@ def currents_fetch_stations():
                     try:
                         my_response = requests.get(my_request)
                         my_response.raise_for_status()
-                        print(f'Creating bins {wp_row['id']}')
+                        print(f'Requesting bin number for {wp_row['id']}')
                         bins_tree = SoupFromXMLResponse(StringIO(my_response.content.decode())).tree
                         bin_count = int(bins_tree.find("nbr_of_bins").text)
                         if bin_count and bins_tree.find('Bin').find('depth') is not None:
@@ -180,11 +177,12 @@ def currents_fetch_stations():
             print(str(e))
             time.sleep(1)
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows).drop_duplicates()
 
 
 if __name__ == '__main__':
 
+    # set up folder structure
     folder = Path('/users/jason/Developer Workspace')
     GPX_folder = folder.joinpath('GPX')
     stations_folder = GPX_folder.joinpath('stations')
@@ -197,17 +195,20 @@ if __name__ == '__main__':
     if not OpenCPN_folder.exists():
         mkdir(OpenCPN_folder)
 
-    print(f'Fetching all NOAA current stations')
+    # request all the current stations from NOAA
+    print(f'Requesting all NOAA current stations')
     stations_file = stations_folder.joinpath('stations.csv')
-    if stations_file.exists():
+    if print_file_exists(stations_file):
         station_frame = read_df(stations_file)
     else:
         station_frame = currents_fetch_stations()
-        write_df(station_frame, stations_file)
+        print_file_exists(write_df(station_frame, stations_file))
 
-    print(f'Creating all the NOAA waypoint folders and files')
+    # create all the waypoint folders and gpx files
+    print(f'Creating all the NOAA waypoint folders and gpx files')
     for index, row in station_frame.iterrows():
         if '#' not in row['id']:
+            print(f'{row['id']}')
             wp_folder = stations_folder.joinpath(row['id'])
             if not wp_folder.exists():
                 mkdir(wp_folder)
@@ -217,9 +218,10 @@ if __name__ == '__main__':
             with open(OpenCPN_folder.joinpath(row['id'] + '.gpx'), "w") as file:
                 file.write(str(wp.soup))
 
+    # request the current data for each station
     for index, row in station_frame.iterrows():
         if '#' not in row['id'] and row['type'] != 'W':
-            print(f'Downloading current data for {row['id']}')
+            print(f'Requesting current data for {row['id']}')
             wp_folder = stations_folder.joinpath(row['id'])
             downloaded_file = wp_folder.joinpath('downloaded_frame.csv')
             wp_file = wp_folder.joinpath('waypoint_velocity_frame.csv')
@@ -231,6 +233,7 @@ if __name__ == '__main__':
                 print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
                 del downloaded_velocity, sixteen_months
 
+    # generate dataframes by minutes from dataframe with only max, slack and min using cubic fitting
     for index, row in station_frame.iterrows():
         if '#' not in row['id']:
             print(f'Checking {row['id']} station type (H/S)')
@@ -240,6 +243,8 @@ if __name__ == '__main__':
             cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
 
             downloaded_velocity = read_df(downloaded_file)
+            downloaded_velocity['dt'] = pd.to_datetime(downloaded_velocity['Time'])
+
             if not downloaded_velocity['timestamp'].is_monotonic_increasing:
                 print(f'{row['id']} timestamps are not monotonically increasing')
                 # for r in range(0, len(downloaded_velocity) - 1):
