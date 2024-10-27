@@ -143,6 +143,7 @@ class SixteenMonths:
 
 def currents_fetch_stations():
 
+    rows = None
     my_request = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.xml?type=currentpredictions&units=english"
     for _ in range(3):
         try:
@@ -220,8 +221,10 @@ if __name__ == '__main__':
             cubic_file = wp_folder.joinpath('cubic_spline_frame.csv')
 
             if not print_file_exists(downloaded_file):
-                downloaded_velocity = SixteenMonths(2024, row['id']).frame
+                sixteen_months = SixteenMonths(2024, row['id'])
+                downloaded_velocity = sixteen_months.frame
                 print_file_exists(write_df(downloaded_velocity, wp_folder.joinpath('downloaded_frame.csv')))
+                del downloaded_velocity, sixteen_months
 
     for index, row in station_frame.iterrows():
         if '#' not in row['id']:
