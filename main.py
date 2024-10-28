@@ -307,7 +307,8 @@ if __name__ == '__main__':
                 file.write(str(wp.soup))
 
     print(f'Requesting velocity data for each waypoint')
-    keys = [job_manager.put(RequestVelocityJob(2024, wp)) for wp in waypoint_dict.values()]
+    non_weak_waypoints = [wp for wp in waypoint_dict.values() if wp.type != 'W']
+    keys = [job_manager.put(RequestVelocityJob(2024, wp)) for wp in non_weak_waypoints]
     # for wp in waypoint_dict.values():
     #     job = RequestVelocityJob(2024, wp)
     #     result = job.execute()
