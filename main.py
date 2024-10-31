@@ -9,6 +9,7 @@ from io import StringIO
 import os
 import json
 
+from sympy.unify.core import unpack
 from tt_file_tools.file_tools import SoupFromXMLResponse, SoupFromXMLFile, write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
 
@@ -38,6 +39,10 @@ class NOAAFolders:
 
 class CurrentWaypoint:
 
+    download_csv = 'downloaded_frame.csv'
+    velocity_csv = 'waypoint_velocity_frame.csv'
+    spline_csv = 'cubic_spline_frame.csv'
+
     def write_gpx(self):
         with open(self.folder.joinpath(self.id + '.gpx'), 'w') as a_file:
             a_file.write(str(self.soup))
@@ -57,6 +62,9 @@ class CurrentWaypoint:
         self.name = station_dict[station_id]['name'].strip()
         self.type = station_dict[station_id]['type']
         self.folder = NOAAFolders.stations_folder.joinpath(station_id)
+        self.download_file = self.folder.joinpath(CurrentWaypoint.download_csv)
+        self.velocity_file = self.folder.joinpath(CurrentWaypoint.velocity_csv)
+        self.spline_file = self.folder.joinpath(CurrentWaypoint.spline_csv)
         if not self.folder.exists():
             os.mkdir(self.folder)
 
@@ -126,15 +134,12 @@ class OneMonth:
                 break
             except requests.exceptions.RequestException as req_err:
                 self.error = True
-                # print(str(req_err))
                 time.sleep(1)
             except DataNotAvailable as req_err:
                 self.error = True
-                # print(str(req_err))
                 time.sleep(1)
             except EmptyDataframe as req_err:
                 self.error = True
-                # print(str(req_err))
                 time.sleep(1)
 
 
@@ -142,41 +147,30 @@ class SixteenMonths:
 
     def __init__(self, year: int, waypoint: CurrentWaypoint):
 
+        self.error = False
         self.frame = None
         months = []
 
         self.error = False
         try:
             for m in range(11, 13):
-                month = OneMonth(m, year - 1, waypoint)
-                self.error = month.error
-                if month.error:
-                    raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
-                else:
-                    months.append(month)
-
+                months.append(OneMonth(m, year - 1, waypoint))
             for m in range(1, 13):
-                month = OneMonth(m, year, waypoint)
-                self.error = month.error
-                if month.error:
-                    raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
-                else:
-                    months.append(month)
-
+                months.append(OneMonth(m, year, waypoint))
             for m in range(1, 3):
-                month = OneMonth(m, year - 1, waypoint)
-                self.error = month.error
-                if month.error:
+                months.append(OneMonth(m, year + 1, waypoint))
+
+            for m in months:
+                if m.error:
+                    self.error = True
                     raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
-                else:
-                    months.append(month)
 
             self.frame = pd.concat([m.frame for m in months], axis=0, ignore_index=True)
             for m in range(len(months)):
                 del m
 
         except CSVRequestFailed as req_err:
-            print(str(req_err))
+            self.error = True
             return None
 
 
@@ -184,6 +178,7 @@ class RequestVelocityCSV:
 
     def __init__(self, year: int, waypoint: CurrentWaypoint):
 
+        self.error = False
         self.id = waypoint.id
         self.csv = waypoint.folder.joinpath('downloaded_frame.csv')
         waypoint_csv = waypoint.folder.joinpath('waypoint_velocity_frame.csv')
@@ -194,7 +189,8 @@ class RequestVelocityCSV:
                 if sixteen_months.error:
                     raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
             except CSVRequestFailed as req_err:
-                return None
+                self.error = True
+
             downloaded_frame = sixteen_months.frame
             self.csv = print_file_exists(write_df(downloaded_frame, self.csv))
             if waypoint.type == "H":
@@ -218,26 +214,26 @@ class SplineCSV:
 
     def __init__(self, waypoint: CurrentWaypoint):
 
-        downloaded_csv = waypoint.folder.joinpath('downloaded_frame.csv')
-        waypoint_csv = waypoint.folder.joinpath('waypoint_velocity_frame.csv')
-        downloaded_velocity = read_df(downloaded_csv)
-        self.csv = waypoint.folder.joinpath('cubic_spline_frame.csv')
+        self.error = False
+        self.csv = None
+
+        self.id = waypoint.id
+        velocity_frame = read_df(waypoint.download_file)
 
         try:
-            if not downloaded_velocity['Time'].is_monotonic_increasing:
-                raise NonMonotonic('<!> ' + waypoint.id + 'Timestamp is not monotonically increasing')
-            elif row['type'] == 'H':
-                write_df(downloaded_velocity, waypoint_csv)
-            elif row['type'] == 'S':
-                if not print_file_exists(self.csv):
-                    print_file_exists(write_df(CubicSplineVelocityFrame(downloaded_velocity).frame, self.csv))
-                    write_df(downloaded_velocity, waypoint_csv)
-        except NonMonotonic as e:
-            print(str(e))
-            waypoint.NotMonotonic = True
-            # for r in range(0, len(downloaded_velocity) - 1):
-            #     if downloaded_velocity.loc[r]['timestamp'] >= downloaded_velocity.loc[r + 1]['timestamp']:
-            #         print(f'Check value in row {r}')
+            spline = CubicSplineVelocityFrame(velocity_frame)
+            if spline.error:
+                raise SplineCSVFailed('<!> ' + waypoint.id + ' Spline fit failed')
+            frame = spline.frame
+            if print_file_exists(write_df(frame, waypoint.spline_file)):
+                write_df(frame, waypoint.velocity_file)
+                self.csv = waypoint.spline_file
+        except SplineCSVFailed as spline_err:
+            self.error = True
+
+        # for r in range(0, len(downloaded_velocity) - 1):
+        #     if downloaded_velocity.loc[r]['timestamp'] >= downloaded_velocity.loc[r + 1]['timestamp']:
+        #         print(f'Check value in row {r}')
 
 
 class SplineJob(Job):  # super -> job name, result key, function/object, arguments
@@ -249,19 +245,23 @@ class SplineJob(Job):  # super -> job name, result key, function/object, argumen
     def __init__(self, waypoint: CurrentWaypoint):
         result_key = id(waypoint.id)
         arguments = tuple([waypoint])
-        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, RequestVelocityCSV, arguments)
+        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments)
 
 
 class CubicSplineVelocityFrame:
 
     def __init__(self, frame: pd.DataFrame):
 
+        self.error = False
         self.frame = None
 
         frame['datetime'] = pd.to_datetime(frame['Time'])
         frame['timestamp'] = frame['datetime'].apply(dt.timestamp).astype('int')
 
-        if frame['timestamp'].is_monotonic_increasing:
+        try:
+            if not frame['timestamp'].is_monotonic_increasing:
+                raise NonMonotonic('<!> Timestamp column is not monotonically increasing')
+
             cs = CubicSpline(frame['timestamp'], frame['velocity'])
             start_date = frame['datetime'].iloc[0].date()
             start_date = dt.combine(start_date, dt.min.time())
@@ -273,8 +273,8 @@ class CubicSplineVelocityFrame:
             self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
             self.frame['velocity'] = self.frame['timestamp'].apply(cs)
             self.frame['velocity'] = self.frame['velocity'].round(2)
-        else:
-            raise NonMonotonic('Timestamp column is not monotonically increasing')
+        except NonMonotonic as req_err:
+            self.error = True
 
 
 class NonMonotonic(Exception):
@@ -301,6 +301,12 @@ class CSVRequestFailed(Exception):
         super().__init__(message)
 
 
+class SplineCSVFailed(Exception):
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 class StationDict:
 
     @staticmethod
@@ -312,9 +318,10 @@ class StationDict:
 
     @staticmethod
     def read_dict():
-        if print_file_exists(NOAAFolders.stations_filepath):
-            with open(NOAAFolders.stations_filepath, 'r') as a_file:
-                return json.load(a_file)
+        if not NOAAFolders.stations_filepath.exists():
+            raise FileExistsError(NOAAFolders.stations_filepath)
+        with open(NOAAFolders.stations_filepath, 'r') as a_file:
+            return json.load(a_file)
 
     def __init__(self):
 
@@ -358,11 +365,9 @@ class StationDict:
                                     self.dict[station_id]['bins'] = bin_dict
                                 break
                             except requests.exceptions.RequestException as req_err:
-                                print(str(req_err))
                                 time.sleep(1)
                     break
                 except requests.exceptions.RequestException as req_err:
-                    print(str(req_err))
                     time.sleep(1)
 
 
@@ -376,6 +381,7 @@ if __name__ == '__main__':
 
     station_dict = StationDict().dict
     waypoint_dict = {}
+    spline_dict = {}
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
     for station in station_dict.keys():
@@ -384,7 +390,7 @@ if __name__ == '__main__':
             waypoint_dict[station] = wp
 
     print(f'Requesting velocity data for each waypoint')
-    waypoints = [wp for wp in waypoint_dict.values() if wp.type != 'W']
+    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_file.exists() or '#' in wp.id)]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -392,21 +398,15 @@ if __name__ == '__main__':
                 print(f'{wp.id} is missing downloaded velocity data')
 
         keys = [job_manager.put(RequestVelocityJob(this_year, wp)) for wp in waypoints]
-        # for wp in non_weak_waypoints:
-        #     if wp.id == 'ACT8831':
-        #         pass
-        #     job = RequestVelocityJob(this_year, wp)
-        #     result = job.execute()
         job_manager.wait()
 
-        waypoints = [waypoint_dict[job.id] for job in [job_manager.get(key) for key in keys] if not job.csv.exists()]
+        waypoints = [waypoint_dict[job.id] for job in [job_manager.get(key) for key in keys] if job.error]
 
     print(f'Spline fitting subordinate waypoints')
-    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S']
+    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_file.exists()]
     keys = [job_manager.put(SplineJob(wp)) for wp in subordinate_waypoints]
-    # for wp in subordinate_waypoints:
-    #     job = SplineJob(wp)
-    #     result = job.execute()
     job_manager.wait()
-    for path in [job_manager.get(key).csv for key in keys]:
-        print_file_exists(path)
+    for job in [job_manager.get(key) for key in keys]:
+        spline_dict[job.id] = print_file_exists(waypoint_dict[job.id].spline_file)
+
+    job_manager.stop_queue()
