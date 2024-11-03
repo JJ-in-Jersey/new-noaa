@@ -1,5 +1,6 @@
 import time
 from datetime import datetime as dt
+
 from dateutil.relativedelta import relativedelta
 from scipy.interpolate import CubicSpline
 from pathlib import Path
@@ -9,7 +10,6 @@ from io import StringIO
 import os
 import json
 
-from sympy.unify.core import unpack
 from tt_file_tools.file_tools import SoupFromXMLResponse, SoupFromXMLFile, write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
 
@@ -132,13 +132,13 @@ class OneMonth:
                 self.frame = frame.rename(columns={heading: heading.strip() for heading in frame.columns.tolist()})
                 self.frame.rename(columns={'Velocity_Major': 'velocity'}, inplace=True)
                 break
-            except requests.exceptions.RequestException as req_err:
+            except requests.exceptions.RequestException:
                 self.error = True
                 time.sleep(1)
-            except DataNotAvailable as req_err:
+            except DataNotAvailable:
                 self.error = True
                 time.sleep(1)
-            except EmptyDataframe as req_err:
+            except EmptyDataframe:
                 self.error = True
                 time.sleep(1)
 
@@ -147,50 +147,40 @@ class SixteenMonths:
 
     def __init__(self, year: int, waypoint: CurrentWaypoint):
 
-        self.error = False
-        self.frame = None
         months = []
+        failure_message = '<!> ' + waypoint.id + ' CSV Request failed'
 
-        self.error = False
-        try:
-            for m in range(11, 13):
-                months.append(OneMonth(m, year - 1, waypoint))
-            for m in range(1, 13):
-                months.append(OneMonth(m, year, waypoint))
-            for m in range(1, 3):
-                months.append(OneMonth(m, year + 1, waypoint))
+        for m in range(11, 13):
+            month = OneMonth(m, year - 1, waypoint)
+            if month.error:
+                raise CSVRequestFailed(failure_message)
+            months.append(month)
+        for m in range(1, 13):
+            month = OneMonth(m, year, waypoint)
+            if month.error:
+                raise CSVRequestFailed(failure_message)
+            months.append(month)
+        for m in range(1, 3):
+            month = OneMonth(m, year + 1, waypoint)
+            if month.error:
+                raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
+            months.append(month)
 
-            for m in months:
-                if m.error:
-                    self.error = True
-                    raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
-
-            self.frame = pd.concat([m.frame for m in months], axis=0, ignore_index=True)
-            for m in range(len(months)):
-                del m
-
-        except CSVRequestFailed as req_err:
-            self.error = True
-            return None
+        self.frame = pd.concat([m.frame for m in months], axis=0, ignore_index=True)
+        for m in range(len(months)):
+            del m
 
 
 class RequestVelocityCSV:
 
     def __init__(self, year: int, waypoint: CurrentWaypoint):
 
-        self.error = False
         self.id = waypoint.id
         self.csv = waypoint.folder.joinpath('downloaded_frame.csv')
         waypoint_csv = waypoint.folder.joinpath('waypoint_velocity_frame.csv')
 
         if not self.csv.exists():
-            try:
-                sixteen_months = SixteenMonths(year, waypoint)
-                if sixteen_months.error:
-                    raise CSVRequestFailed('<!> ' + waypoint.id + ' CSV Request failed')
-            except CSVRequestFailed as req_err:
-                self.error = True
-
+            sixteen_months = SixteenMonths(year, waypoint)
             downloaded_frame = sixteen_months.frame
             self.csv = print_file_exists(write_df(downloaded_frame, self.csv))
             if waypoint.type == "H":
@@ -214,26 +204,15 @@ class SplineCSV:
 
     def __init__(self, waypoint: CurrentWaypoint):
 
-        self.error = False
         self.csv = None
 
         self.id = waypoint.id
         velocity_frame = read_df(waypoint.download_file)
 
-        try:
-            spline = CubicSplineVelocityFrame(velocity_frame)
-            if spline.error:
-                raise SplineCSVFailed('<!> ' + waypoint.id + ' Spline fit failed')
-            frame = spline.frame
-            if print_file_exists(write_df(frame, waypoint.spline_file)):
-                write_df(frame, waypoint.velocity_file)
-                self.csv = waypoint.spline_file
-        except SplineCSVFailed as spline_err:
-            self.error = True
-
-        # for r in range(0, len(downloaded_velocity) - 1):
-        #     if downloaded_velocity.loc[r]['timestamp'] >= downloaded_velocity.loc[r + 1]['timestamp']:
-        #         print(f'Check value in row {r}')
+        frame = CubicSplineVelocityFrame(velocity_frame).frame
+        if print_file_exists(write_df(frame, waypoint.spline_file)):
+            write_df(frame, waypoint.velocity_file)
+        self.csv = waypoint.spline_file
 
 
 class SplineJob(Job):  # super -> job name, result key, function/object, arguments
@@ -252,29 +231,25 @@ class CubicSplineVelocityFrame:
 
     def __init__(self, frame: pd.DataFrame):
 
-        self.error = False
         self.frame = None
 
         frame['datetime'] = pd.to_datetime(frame['Time'])
         frame['timestamp'] = frame['datetime'].apply(dt.timestamp).astype('int')
 
-        try:
-            if not frame['timestamp'].is_monotonic_increasing:
-                raise NonMonotonic('<!> Timestamp column is not monotonically increasing')
+        if not (frame['timestamp'].is_monotonic_increasing and frame['timestamp'].is_unique):
+            raise NonMonotonic('<!> Timestamp column is not strictly monotonically increasing')
 
-            cs = CubicSpline(frame['timestamp'], frame['velocity'])
-            start_date = frame['datetime'].iloc[0].date()
-            start_date = dt.combine(start_date, dt.min.time())
-            end_date = frame['datetime'].iloc[-1].date() + relativedelta(days=1)
-            end_date = dt.combine(end_date, dt.min.time())
-            minutes = int((end_date - start_date).total_seconds()/60)
+        cs = CubicSpline(frame['timestamp'], frame['velocity'])
+        start_date = frame['datetime'].iloc[0].date()
+        start_date = dt.combine(start_date, dt.min.time())
+        end_date = frame['datetime'].iloc[-1].date() + relativedelta(days=1)
+        end_date = dt.combine(end_date, dt.min.time())
+        minutes = int((end_date - start_date).total_seconds()/60)
 
-            self.frame = pd.DataFrame({'datetime': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
-            self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
-            self.frame['velocity'] = self.frame['timestamp'].apply(cs)
-            self.frame['velocity'] = self.frame['velocity'].round(2)
-        except NonMonotonic as req_err:
-            self.error = True
+        self.frame = pd.DataFrame({'datetime': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
+        self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
+        self.frame['velocity'] = self.frame['timestamp'].apply(cs)
+        self.frame['velocity'] = self.frame['velocity'].round(2)
 
 
 class NonMonotonic(Exception):
@@ -364,10 +339,10 @@ class StationDict:
                                     bin_dict = dict(sorted(bin_dict.items(), key=lambda item: item[1]))
                                     self.dict[station_id]['bins'] = bin_dict
                                 break
-                            except requests.exceptions.RequestException as req_err:
+                            except requests.exceptions.RequestException:
                                 time.sleep(1)
                     break
-                except requests.exceptions.RequestException as req_err:
+                except requests.exceptions.RequestException:
                     time.sleep(1)
 
 
@@ -399,8 +374,7 @@ if __name__ == '__main__':
 
         keys = [job_manager.put(RequestVelocityJob(this_year, wp)) for wp in waypoints]
         job_manager.wait()
-
-        waypoints = [waypoint_dict[job.id] for job in [job_manager.get(key) for key in keys] if job.error]
+        waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_file.exists())]
 
     print(f'Spline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_file.exists()]
