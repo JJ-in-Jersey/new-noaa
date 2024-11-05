@@ -372,15 +372,19 @@ if __name__ == '__main__':
             for wp in waypoints:
                 print(f'{wp.id} is missing downloaded velocity data')
 
-        keys = [job_manager.put(RequestVelocityJob(this_year, wp)) for wp in waypoints]
+        v_keys = [job_manager.submit_job(RequestVelocityJob(this_year, wp)) for wp in waypoints]
         job_manager.wait()
+        for result in [job_manager.get_result(key) for key in v_keys]:
+            if result is not None:
+                print_file_exists(waypoint_dict[result.id].download_file)
         waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_file.exists())]
 
     print(f'Spline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_file.exists()]
-    keys = [job_manager.put(SplineJob(wp)) for wp in subordinate_waypoints]
+    keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     job_manager.wait()
-    for job in [job_manager.get(key) for key in keys]:
-        spline_dict[job.id] = print_file_exists(waypoint_dict[job.id].spline_file)
+    for result in [job_manager.get_result(key) for key in keys]:
+        if result is not None:
+            spline_dict[result.id] = print_file_exists(waypoint_dict[result.id].spline_file)
 
     job_manager.stop_queue()
