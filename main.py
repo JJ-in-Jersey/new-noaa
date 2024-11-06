@@ -27,7 +27,7 @@ class NOAAFolders:
     @staticmethod
     def build_folders():
         if not NOAAFolders.GPX.exists():
-            os.mkdir(NOAAFolders.GPX)
+            os.makedirs(NOAAFolders.GPX)
         if not NOAAFolders.stations_folder.exists():
             os.mkdir(NOAAFolders.stations_folder)
         if not NOAAFolders.Open_CPN.exists():
