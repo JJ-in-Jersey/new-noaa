@@ -350,19 +350,15 @@ if __name__ == '__main__':
 
     this_year = 2024
 
+    print(f'Creating all the NOAA waypoint folders and gpx files')
+    station_dict = StationDict().dict
+    waypoint_dict = { station: CurrentWaypoint(station) for station in station_dict.keys() if '# not in station'}
+
+    spline_dict = {}
+
     # fire up the job manager
     job_manager = JobManager()
     NOAAFolders.build_folders()
-
-    station_dict = StationDict().dict
-    waypoint_dict = {}
-    spline_dict = {}
-
-    print(f'Creating all the NOAA waypoint folders and gpx files')
-    for station in station_dict.keys():
-        if '#' not in station:
-            wp = CurrentWaypoint(station)
-            waypoint_dict[station] = wp
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_file.exists() or '#' in wp.id)]
