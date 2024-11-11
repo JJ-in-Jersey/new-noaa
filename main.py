@@ -53,13 +53,14 @@ class CurrentWaypoint:
 
     def __init__(self, station_id: str):
 
-        dash = ' - '
+        # dash = ' - '
+        type_string = None
 
         self.soup = None
         self.id = station_id
         self.bins = station_dict[station_id]['bins'] if 'bins' in station_dict[station_id].keys() else None
         self.bin = None if self.bins is None else int(list(self.bins.values())[0])
-        self.name = station_dict[station_id]['name'].strip()
+        self.name = station_dict[station_id]['name'].strip() + ' ' + self.id
         self.type = station_dict[station_id]['type']
         self.folder = NOAAFolders.stations_folder.joinpath(station_id)
         self.download_file = self.folder.joinpath(CurrentWaypoint.download_csv)
@@ -74,11 +75,14 @@ class CurrentWaypoint:
         tree.find('wpt')['lon'] = station_dict[station_id]['lng']
 
         if self.type == 'S':  # subordinate
-            tree.find('sym').string = 'Symbol-Pin-Green'
+            tree.find('sym').string = 'Symbol-Spot-Yellow'
+            type_string = 'Subordinate'
         elif self.type == 'H':  # harmonic
             tree.find('sym').string = 'Symbol-Spot-Green'
+            type_string = 'Harmonic'
         elif self.type == 'W':  # weak & variable
             tree.find('sym').string = 'Symbol-Pin-Yellow'
+            type_string = 'Weak'
         # else:
         #     print(self.id, my_row['type'])
 
@@ -87,7 +91,8 @@ class CurrentWaypoint:
         tree.find('name').insert_before(id_tag)
 
         desc_tag = tree.new_tag('desc')
-        desc_tag.string = self.id + dash + self.type if self.bin is None else self.id + dash + str(int(self.bin)) + dash + self. type
+        # desc_tag.string = self.id + dash + self.type if self.bin is None else self.id + dash + str(int(self.bin)) + dash + self. type
+        desc_tag.string = type_string
         tree.find('name').insert_after(desc_tag)
 
         self.soup = tree
@@ -188,6 +193,7 @@ class RequestVelocityCSV:
                 del downloaded_frame, sixteen_months
 
 
+# noinspection PyShadowingNames
 class RequestVelocityJob(Job):  # super -> job name, result key, function/object, arguments
 
     def execute(self): return super().execute()
@@ -215,6 +221,7 @@ class SplineCSV:
         self.csv = waypoint.spline_file
 
 
+# noinspection PyShadowingNames
 class SplineJob(Job):  # super -> job name, result key, function/object, arguments
 
     def execute(self): return super().execute()
@@ -351,6 +358,7 @@ if __name__ == '__main__':
     this_year = 2024
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
+    NOAAFolders.build_folders()
     station_dict = StationDict().dict
     waypoint_dict = { station: CurrentWaypoint(station) for station in station_dict.keys() if '# not in station'}
 
@@ -358,7 +366,6 @@ if __name__ == '__main__':
 
     # fire up the job manager
     job_manager = JobManager()
-    NOAAFolders.build_folders()
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_file.exists() or '#' in wp.id)]
