@@ -53,13 +53,12 @@ class CurrentWaypoint:
 
     def __init__(self, station_id: str):
 
-        # dash = ' - '
         type_string = None
 
         self.soup = None
         self.id = station_id
-        self.bins = station_dict[station_id]['bins'] if 'bins' in station_dict[station_id].keys() else None
-        self.bin = None if self.bins is None else int(list(self.bins.values())[0])
+        # self.bins = station_dict[station_id]['bins'] if 'bins' in station_dict[station_id].keys() else None
+        # self.bin = None if self.bins is None else int(list(self.bins.values())[0])
         self.name = station_dict[station_id]['name'].strip() + ' ' + self.id
         self.type = station_dict[station_id]['type']
         self.folder = NOAAFolders.stations_folder.joinpath(station_id)
@@ -70,30 +69,37 @@ class CurrentWaypoint:
             os.mkdir(self.folder)
 
         tree = SoupFromXMLFile(NOAAFolders.template_path).tree
-        tree.find('name').string = self.name
+        tree.find('name').string = station_dict[station_id]['name'].strip() + ' ' + station_id
         tree.find('wpt')['lat'] = station_dict[station_id]['lat']
         tree.find('wpt')['lon'] = station_dict[station_id]['lng']
 
-        if self.type == 'S':  # subordinate
+        #  place holders should use Symbol-Pin-Green
+
+        if station_dict[station_id]['type'] == 'S':  # subordinate
             tree.find('sym').string = 'Symbol-Spot-Yellow'
             type_string = 'Subordinate'
-        elif self.type == 'H':  # harmonic
+        elif station_dict[station_id]['type'] == 'H':  # harmonic
             tree.find('sym').string = 'Symbol-Spot-Green'
             type_string = 'Harmonic'
-        elif self.type == 'W':  # weak & variable
+        elif station_dict[station_id]['type'] == 'W':  # weak & variable
             tree.find('sym').string = 'Symbol-Pin-Yellow'
             type_string = 'Weak'
         # else:
         #     print(self.id, my_row['type'])
 
         id_tag = tree.new_tag('id')
-        id_tag.string = self.id
-        tree.find('name').insert_before(id_tag)
+        id_tag.string = station_id
+        tree.find('name').insert_after(id_tag)
+
+        link_tag = tree.new_tag('link', href="")
+        link_text_tag = tree.new_tag('text')
+        link_text_tag.string = type_string
+        tree.find('name').insert_after(link_tag)
+        tree.find('link').append(link_text_tag)
 
         desc_tag = tree.new_tag('desc')
-        # desc_tag.string = self.id + dash + self.type if self.bin is None else self.id + dash + str(int(self.bin)) + dash + self. type
-        desc_tag.string = type_string
-        tree.find('name').insert_after(desc_tag)
+        desc_tag.string = str(self.velocity_file.absolute())
+        tree.find('link').insert_after(desc_tag)
 
         self.soup = tree
         self.write_gpx()
