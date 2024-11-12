@@ -366,7 +366,7 @@ if __name__ == '__main__':
     print(f'Creating all the NOAA waypoint folders and gpx files')
     NOAAFolders.build_folders()
     station_dict = StationDict().dict
-    waypoint_dict = { station: CurrentWaypoint(station) for station in station_dict.keys() if '# not in station'}
+    waypoint_dict = {station: CurrentWaypoint(station) for station in station_dict.keys() if '#' not in station}
 
     spline_dict = {}
 
