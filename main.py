@@ -91,7 +91,7 @@ if __name__ == '__main__':
     job_manager = JobManager()
 
     print(f'Requesting velocity data for each waypoint')
-    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.velocity_csv.exists() or '#' in wp.id)]
+    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv.exists() or '#' in wp.id)]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
