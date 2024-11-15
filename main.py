@@ -12,12 +12,16 @@ from tt_gpx.gpx import Waypoint
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
-        if not waypoint.download_csv.exists():
+        if not waypoint.download_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
             downloaded_frame = sixteen_months.frame
-            print_file_exists(write_df(downloaded_frame, waypoint.download_csv))
-            if waypoint.type == "H":
-                write_df(downloaded_frame, waypoint.velocity_csv)
+            print_file_exists(write_df(downloaded_frame, waypoint.download_csv_path))
+        if waypoint.type == 'H' and not waypoint.velocity_csv_path.exists():
+            downloaded_frame['datetime'] = pd.to_datetime(downloaded_frame['Time'])
+            downloaded_frame['timestamp'] = downloaded_frame['datetime'].apply(dt.timestamp).astype('int')
+            if not (downloaded_frame['timestamp'].is_monotonic_increasing and downloaded_frame['timestamp'].is_unique):
+                raise NonMonotonic('<!> Timestamp column is not strictly monotonically increasing')
+            write_df(downloaded_frame, waypoint.velocity_csv_path)
 
 
 # noinspection PyShadowingNames
@@ -34,9 +38,9 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
-        frame = CubicSplineVelocityFrame(read_df(waypoint.download_csv)).frame
-        if print_file_exists(write_df(frame, waypoint.spline_csv)):
-            write_df(frame, waypoint.velocity_csv)
+        frame = CubicSplineVelocityFrame(read_df(waypoint.download_csv_path)).frame
+        if print_file_exists(write_df(frame, waypoint.spline_csv_path)):
+            write_df(frame, waypoint.velocity_csv_path)
 
 
 # noinspection PyShadowingNames
@@ -91,7 +95,7 @@ if __name__ == '__main__':
     job_manager = JobManager()
 
     print(f'Requesting velocity data for each waypoint')
-    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv.exists() or '#' in wp.id)]
+    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or '#' in wp.id)]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -102,16 +106,16 @@ if __name__ == '__main__':
         job_manager.wait()
         for result in [job_manager.get_result(key) for key in v_keys]:
             if result is not None:
-                print_file_exists(waypoint_dict[result.id].download_csv)
-        waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv.exists())]
+                print_file_exists(waypoint_dict[result.id].download_csv_path)
+        waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists())]
 
     print(f'Spline fitting subordinate waypoints')
     spline_dict = {}
-    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv.exists()]
+    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()]
     s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in s_keys]:
         if result is not None:
-            spline_dict[result.id] = print_file_exists(waypoint_dict[result.id].spline_csv)
+            spline_dict[result.id] = print_file_exists(waypoint_dict[result.id].spline_csv_path)
 
     job_manager.stop_queue()
