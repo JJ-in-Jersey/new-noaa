@@ -12,6 +12,8 @@ from tt_gpx.gpx import Waypoint
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
+        self.id = waypoint.id
+        downloaded_frame = None
         if not waypoint.download_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
             downloaded_frame = sixteen_months.frame
@@ -38,6 +40,7 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
+        self.id = waypoint.id
         frame = CubicSplineVelocityFrame(read_df(waypoint.download_csv_path)).frame
         if print_file_exists(write_df(frame, waypoint.spline_csv_path)):
             write_df(frame, waypoint.velocity_csv_path)
