@@ -101,8 +101,8 @@ if __name__ == '__main__':
         wp.write_gpx()
 
     # fire up the job manager
-    # job_manager = JobManager()
-    job_manager = None
+    job_manager = JobManager()
+    # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or
@@ -127,10 +127,10 @@ if __name__ == '__main__':
     print(f'Spline fitting subordinate waypoints')
     spline_dict = {}
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()]
-    # s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
-    for wp in subordinate_waypoints:
-        job = SplineJob(wp)
-        result = job.execute()
+    s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
+    # for wp in subordinate_waypoints:
+    #     job = SplineJob(wp)
+    #     result = job.execute()
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in s_keys]:
         if result is not None:
