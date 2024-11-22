@@ -1,8 +1,12 @@
 from argparse import ArgumentParser as argParser
 from datetime import datetime as dt
+
 from dateutil.relativedelta import relativedelta
 from scipy.interpolate import CubicSpline
 import pandas as pd
+from os import listdir
+from os.path import isfile
+from pathlib import Path
 
 from tt_file_tools.file_tools import write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
@@ -13,17 +17,15 @@ from tt_gpx.gpx import Waypoint
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
         self.id = waypoint.id
-        downloaded_frame = None
+
         if not waypoint.download_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
-            downloaded_frame = sixteen_months.frame
-            print_file_exists(write_df(downloaded_frame, waypoint.download_csv_path))
-        if waypoint.type == 'H' and not waypoint.velocity_csv_path.exists():
-            downloaded_frame['datetime'] = pd.to_datetime(downloaded_frame['Time'])
-            downloaded_frame['timestamp'] = downloaded_frame['datetime'].apply(dt.timestamp).astype('int')
-            if not (downloaded_frame['timestamp'].is_monotonic_increasing and downloaded_frame['timestamp'].is_unique):
-                raise NonMonotonic('<!> Timestamp column is not strictly monotonically increasing')
-            write_df(downloaded_frame, waypoint.velocity_csv_path)
+            if not sixteen_months.error:
+                self.frame = sixteen_months.adj_frame
+                write_df(sixteen_months.raw_frame, waypoint.raw_csv_path)
+                write_df(sixteen_months.adj_frame, waypoint.download_csv_path)
+            else:
+                raise sixteen_months.error
 
 
 # noinspection PyShadowingNames
@@ -61,26 +63,30 @@ class SplineJob(Job):  # super -> job name, result key, function/object, argumen
 class CubicSplineVelocityFrame:
     def __init__(self, frame: pd.DataFrame):
         self.frame = None
-        frame['datetime'] = pd.to_datetime(frame['Time'])
-        frame['timestamp'] = frame['datetime'].apply(dt.timestamp).astype('int')
-        if not (frame['timestamp'].is_monotonic_increasing and frame['timestamp'].is_unique):
-            raise NonMonotonic('<!> Timestamp column is not strictly monotonically increasing')
-        cs = CubicSpline(frame['timestamp'], frame['velocity'])
-        start_date = frame['datetime'].iloc[0].date()
-        start_date = dt.combine(start_date, dt.min.time())
-        end_date = frame['datetime'].iloc[-1].date() + relativedelta(days=1)
-        end_date = dt.combine(end_date, dt.min.time())
+
+        if not (frame['stamp'].is_monotonic_increasing and frame['stamp'].is_unique):
+            raise NonMonotonic('<!> Data not strictly monotonic')
+        cs = CubicSpline(frame['stamp'], frame['Velocity_Major'])
+
+        start_date = dt.combine(pd.to_datetime(frame['Time'].iloc[0], utc=True).date(), dt.min.time())
+        end_date = dt.combine(pd.to_datetime(frame['Time'].iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
         minutes = int((end_date - start_date).total_seconds()/60)
         self.frame = pd.DataFrame({'datetime': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
-        self.frame['timestamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
-        self.frame['velocity'] = self.frame['timestamp'].apply(cs)
-        self.frame['velocity'] = self.frame['velocity'].round(2)
+        self.frame['stamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
+        self.frame['Velocity_Major'] = self.frame['stamp'].apply(cs).round(2)
 
 
 class SplineCSVFailed(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
+
+
+def month_data_exists(folder: str):
+    folder_path = Path(folder)
+    if bool([f for f in listdir(folder_path) if isfile(folder_path.joinpath(f)) and 'month' in f]):
+        return True
+    return False
 
 
 if __name__ == '__main__':
@@ -95,10 +101,12 @@ if __name__ == '__main__':
         wp.write_gpx()
 
     # fire up the job manager
-    job_manager = JobManager()
+    # job_manager = JobManager()
+    job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
-    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or '#' in wp.id)]
+    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or
+                                                             '#' in wp.id or month_data_exists(wp.folder))]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -106,16 +114,23 @@ if __name__ == '__main__':
                 print(f'{wp.id} is missing downloaded velocity data')
 
         v_keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
+        # for wp in waypoints:
+        #     job = RequestVelocityJob(args['year'], wp)
+        #     result = job.execute()
         job_manager.wait()
         for result in [job_manager.get_result(key) for key in v_keys]:
             if result is not None:
                 print_file_exists(waypoint_dict[result.id].download_csv_path)
-        waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists())]
+        waypoints = [wp for wp in waypoint_dict.values()
+                     if not (wp.type == 'W' or wp.download_csv_path.exists() or month_data_exists(wp.folder))]
 
     print(f'Spline fitting subordinate waypoints')
     spline_dict = {}
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()]
-    s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
+    # s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
+    for wp in subordinate_waypoints:
+        job = SplineJob(wp)
+        result = job.execute()
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in s_keys]:
         if result is not None:
