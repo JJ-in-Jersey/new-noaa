@@ -4,14 +4,11 @@ from datetime import datetime as dt
 from dateutil.relativedelta import relativedelta
 from scipy.interpolate import CubicSpline
 import pandas as pd
-from os import listdir
-from os.path import isfile
-from pathlib import Path
 
 from tt_globals.globals import PresetGlobals
 from tt_file_tools.file_tools import write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
-from tt_noaa_data.noaa_data import StationDict, SixteenMonths, NonMonotonic
+from tt_noaa_data.noaa_data import StationDict, SixteenMonths, NonMonotonic, OneMonth
 from tt_gpx.gpx import Waypoint
 
 
@@ -83,20 +80,6 @@ class SplineCSVFailed(Exception):
         super().__init__(message)
 
 
-def connection_error(folder: str):
-    folder_path = Path(folder)
-    if bool([f for f in listdir(folder_path) if isfile(folder_path.joinpath(f)) and 'connection_error' in f]):
-        return True
-    return False
-
-
-def content_error(folder: str):
-    folder_path = Path(folder)
-    if bool([f for f in listdir(folder_path) if isfile(folder_path.joinpath(f)) and 'content_error' in f]):
-        return True
-    return False
-
-
 if __name__ == '__main__':
     ap = argParser()
     ap.add_argument('year', type=int)
@@ -116,7 +99,7 @@ if __name__ == '__main__':
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or
-                                                             '#' in wp.id or content_error(wp.folder))]
+                                                             '#' in wp.id or OneMonth.content_error(wp.folder))]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -132,12 +115,12 @@ if __name__ == '__main__':
             if result is not None:
                 print_file_exists(waypoint_dict[result.id].download_csv_path)
         waypoints = [wp for wp in waypoint_dict.values()
-                     if not (wp.type == 'W' or wp.download_csv_path.exists() or content_error(wp.folder))]
+                     if not (wp.type == 'W' or wp.download_csv_path.exists() or OneMonth.content_error(wp.folder))]
 
     print(f'Spline fitting subordinate waypoints')
     spline_dict = {}
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()
-                             and not content_error(wp.folder)]
+                             and not OneMonth.content_error(wp.folder)]
     s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
     #     job = SplineJob(wp)
