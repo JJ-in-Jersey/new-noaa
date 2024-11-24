@@ -8,6 +8,7 @@ from os import listdir
 from os.path import isfile
 from pathlib import Path
 
+from tt_globals.globals import PresetGlobals
 from tt_file_tools.file_tools import write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths, NonMonotonic
@@ -93,6 +94,8 @@ if __name__ == '__main__':
     ap = argParser()
     ap.add_argument('year', type=int)
     args = vars(ap.parse_args())
+
+    PresetGlobals.make_folders()
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
     station_dict = StationDict().dict
