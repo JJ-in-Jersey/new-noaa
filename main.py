@@ -8,7 +8,7 @@ import pandas as pd
 from tt_globals.globals import PresetGlobals
 from tt_file_tools.file_tools import write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
-from tt_noaa_data.noaa_data import StationDict, SixteenMonths, NonMonotonic, OneMonth
+from tt_noaa_data.noaa_data import StationDict, SixteenMonths, NonMonotonic, DuplicateTimestamps, OneMonth
 from tt_gpx.gpx import Waypoint
 
 
@@ -62,8 +62,10 @@ class CubicSplineVelocityFrame:
     def __init__(self, frame: pd.DataFrame):
         self.frame = None
 
-        if not (frame['stamp'].is_monotonic_increasing and frame['stamp'].is_unique):
-            raise NonMonotonic('<!> Data not strictly monotonic')
+        if not frame['Time'].is_unique:
+            raise DuplicateTimestamps(f'<!> Duplicate timestamps')
+        if not frame['stamp'].is_monotonic_increasing:
+            raise NonMonotonic(f'<!> Data not monotonic')
         cs = CubicSpline(frame['stamp'], frame['Velocity_Major'])
 
         start_date = dt.combine(pd.to_datetime(frame['Time'].iloc[0], utc=True).date(), dt.min.time())
@@ -98,6 +100,8 @@ if __name__ == '__main__':
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
+    for wp in [wp.empty_folder() for wp in waypoint_dict.values() if OneMonth.connection_error(wp.folder)]:
+        wp.empty_folder()
     waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or
                                                              '#' in wp.id or OneMonth.content_error(wp.folder))]
     while len(waypoints):
@@ -114,6 +118,9 @@ if __name__ == '__main__':
         for result in [job_manager.get_result(key) for key in v_keys]:
             if result is not None:
                 print_file_exists(waypoint_dict[result.id].download_csv_path)
+
+        for wp in [wp.empty_folder() for wp in waypoint_dict.values() if OneMonth.connection_error(wp.folder)]:
+            wp.empty_folder()
         waypoints = [wp for wp in waypoint_dict.values()
                      if not (wp.type == 'W' or wp.download_csv_path.exists() or OneMonth.content_error(wp.folder))]
 
