@@ -100,8 +100,10 @@ if __name__ == '__main__':
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
-    for wp in [wp.empty_folder() for wp in waypoint_dict.values() if OneMonth.connection_error(wp.folder)]:
-        wp.empty_folder()
+    for wp in waypoint_dict.values():
+        if wp.folder.exists() and OneMonth.connection_error(wp.folder):
+            wp.empty_folder()
+
     waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or
                                                              '#' in wp.id or OneMonth.content_error(wp.folder))]
     while len(waypoints):
@@ -119,8 +121,10 @@ if __name__ == '__main__':
             if result is not None:
                 print_file_exists(waypoint_dict[result.id].download_csv_path)
 
-        for wp in [wp.empty_folder() for wp in waypoint_dict.values() if OneMonth.connection_error(wp.folder)]:
-            wp.empty_folder()
+        for wp in waypoint_dict.values():
+            if wp.folder.exists() and OneMonth.connection_error(wp.folder):
+                wp.empty_folder()
+                
         waypoints = [wp for wp in waypoint_dict.values()
                      if not (wp.type == 'W' or wp.download_csv_path.exists() or OneMonth.content_error(wp.folder))]
 
