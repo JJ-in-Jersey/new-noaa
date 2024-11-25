@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
     station_dict = StationDict().dict
-    waypoint_dict = {key: Waypoint(station_dict[key]) for key in station_dict.keys() if '#' not in key}
+    waypoint_dict = {key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')}
     for wp in waypoint_dict.values():
         wp.write_gpx()
 
@@ -100,12 +100,10 @@ if __name__ == '__main__':
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
-    for wp in waypoint_dict.values():
-        if wp.folder.exists() and OneMonth.connection_error(wp.folder):
-            wp.empty_folder()
+    for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
+        wp.empty_folder()
+    waypoints = [w for w in waypoint_dict.values() if not (w.download_csv_path.exists() or OneMonth.content_error(w.folder))]
 
-    waypoints = [wp for wp in waypoint_dict.values() if not (wp.type == 'W' or wp.download_csv_path.exists() or
-                                                             '#' in wp.id or OneMonth.content_error(wp.folder))]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -121,12 +119,9 @@ if __name__ == '__main__':
             if result is not None:
                 print_file_exists(waypoint_dict[result.id].download_csv_path)
 
-        for wp in waypoint_dict.values():
-            if wp.folder.exists() and OneMonth.connection_error(wp.folder):
-                wp.empty_folder()
-                
-        waypoints = [wp for wp in waypoint_dict.values()
-                     if not (wp.type == 'W' or wp.download_csv_path.exists() or OneMonth.content_error(wp.folder))]
+        for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
+            wp.empty_folder()
+        waypoints = [w for w in waypoint_dict.values() if not (w.download_csv_path.exists() or OneMonth.content_error(w.folder))]
 
     print(f'Spline fitting subordinate waypoints')
     spline_dict = {}
