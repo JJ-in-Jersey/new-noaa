@@ -99,7 +99,7 @@ if __name__ == '__main__':
         wp.write_gpx()
 
     # fire up the job manager
-    job_manager = JobManager(4)
+    job_manager = JobManager()
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
@@ -119,7 +119,7 @@ if __name__ == '__main__':
         #     result = job.execute()
         job_manager.wait()
         for result in [job_manager.get_result(key) for key in v_keys]:
-            if result is not None:
+            if result is not None and result.path is not None:
                 print_file_exists(result.path)
                 del result
 
