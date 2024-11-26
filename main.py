@@ -15,13 +15,15 @@ from tt_gpx.gpx import Waypoint
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
         self.id = waypoint.id
+        self.path = None
 
-        if not waypoint.download_csv_path.exists():
+        if not waypoint.adjusted_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
             if not sixteen_months.error:
-                self.frame = sixteen_months.adj_frame
-                write_df(sixteen_months.raw_frame, waypoint.raw_csv_path)
-                write_df(sixteen_months.adj_frame, waypoint.download_csv_path)
+                write_df(sixteen_months.adj_frame, waypoint.adjusted_csv_path)
+                if waypoint.type == 'H':
+                    self.path = write_df(sixteen_months.adj_frame, waypoint.velocity_csv_path)
+                del sixteen_months
             else:
                 raise sixteen_months.error
 
@@ -41,9 +43,10 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
         self.id = waypoint.id
-        frame = CubicSplineVelocityFrame(read_df(waypoint.download_csv_path)).frame
+        self.path = None
+        frame = CubicSplineVelocityFrame(read_df(waypoint.adjusted_csv_path)).frame
         if print_file_exists(write_df(frame, waypoint.spline_csv_path)):
-            write_df(frame, waypoint.velocity_csv_path)
+            self.path = write_df(frame, waypoint.velocity_csv_path)
 
 
 # noinspection PyShadowingNames
@@ -96,13 +99,13 @@ if __name__ == '__main__':
         wp.write_gpx()
 
     # fire up the job manager
-    job_manager = JobManager()
+    job_manager = JobManager(4)
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
     for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
         wp.empty_folder()
-    waypoints = [w for w in waypoint_dict.values() if not (w.download_csv_path.exists() or OneMonth.content_error(w.folder))]
+    waypoints = [w for w in waypoint_dict.values() if not (w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
 
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
@@ -117,14 +120,14 @@ if __name__ == '__main__':
         job_manager.wait()
         for result in [job_manager.get_result(key) for key in v_keys]:
             if result is not None:
-                print_file_exists(waypoint_dict[result.id].download_csv_path)
+                print_file_exists(result.path)
+                del result
 
         for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
             wp.empty_folder()
-        waypoints = [w for w in waypoint_dict.values() if not (w.download_csv_path.exists() or OneMonth.content_error(w.folder))]
+        waypoints = [w for w in waypoint_dict.values() if not (w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
 
     print(f'Spline fitting subordinate waypoints')
-    spline_dict = {}
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()
                              and not OneMonth.content_error(wp.folder)]
     s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
@@ -134,6 +137,7 @@ if __name__ == '__main__':
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in s_keys]:
         if result is not None:
-            spline_dict[result.id] = print_file_exists(waypoint_dict[result.id].spline_csv_path)
+            print_file_exists(result.path)
+            del result
 
     job_manager.stop_queue()
