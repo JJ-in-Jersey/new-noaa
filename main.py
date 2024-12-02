@@ -66,7 +66,7 @@ class CubicSplineVelocityFrame:
         self.frame = None
 
         if not frame.Time.is_unique:
-            raise DuplicateTimestamps(f'<!> Duplicate timestamps')
+            raise DuplicateTimestamps(f'<!> Duplicate times')
         if not frame.stamp.is_monotonic_increasing:
             raise NonMonotonic(f'<!> Data not monotonic')
         cs = CubicSpline(frame.stamp, frame.Velocity_Major)
@@ -75,8 +75,8 @@ class CubicSplineVelocityFrame:
         end_date = dt.combine(pd.to_datetime(frame.Time.iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
         minutes = int((end_date - start_date).total_seconds()/60)
         self.frame = pd.DataFrame({'Time': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
-        self.frame.stamp = self.frame.Time.apply(dt.timestamp).astype('int')
-        self.frame.Velocity_Major = self.frame.stamp.apply(cs).round(2)
+        self.frame['stamp'] = self.frame.Time.apply(dt.timestamp).astype('int')
+        self.frame['Velocity_Major'] = self.frame.stamp.apply(cs).round(2)
 
 
 class SplineCSVFailed(Exception):
@@ -113,12 +113,12 @@ if __name__ == '__main__':
             for wp in waypoints:
                 print(f'{wp.id} is missing downloaded velocity data')
 
-        v_keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
+        keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
         # for wp in waypoints:
         #     job = RequestVelocityJob(args['year'], wp)
         #     result = job.execute()
         job_manager.wait()
-        for result in [job_manager.get_result(key) for key in v_keys]:
+        for result in [job_manager.get_result(key) for key in keys]:
             if result is not None and result.path is not None:
                 print_file_exists(result.path)
                 del result
@@ -130,12 +130,12 @@ if __name__ == '__main__':
     print(f'Spline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()
                              and not OneMonth.content_error(wp.folder)]
-    s_keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
+    keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
     #     job = SplineJob(wp)
     #     result = job.execute()
     job_manager.wait()
-    for result in [job_manager.get_result(key) for key in s_keys]:
+    for result in [job_manager.get_result(key) for key in keys]:
         if result is not None:
             print_file_exists(result.path)
             del result
