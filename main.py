@@ -65,18 +65,18 @@ class CubicSplineVelocityFrame:
     def __init__(self, frame: pd.DataFrame):
         self.frame = None
 
-        if not frame['Time'].is_unique:
+        if not frame.Time.is_unique:
             raise DuplicateTimestamps(f'<!> Duplicate timestamps')
-        if not frame['stamp'].is_monotonic_increasing:
+        if not frame.stamp.is_monotonic_increasing:
             raise NonMonotonic(f'<!> Data not monotonic')
-        cs = CubicSpline(frame['stamp'], frame['Velocity_Major'])
+        cs = CubicSpline(frame.stamp, frame.Velocity_Major)
 
-        start_date = dt.combine(pd.to_datetime(frame['Time'].iloc[0], utc=True).date(), dt.min.time())
-        end_date = dt.combine(pd.to_datetime(frame['Time'].iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
+        start_date = dt.combine(pd.to_datetime(frame.Time.iloc[0], utc=True).date(), dt.min.time())
+        end_date = dt.combine(pd.to_datetime(frame.Time.iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
         minutes = int((end_date - start_date).total_seconds()/60)
-        self.frame = pd.DataFrame({'datetime': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
-        self.frame['stamp'] = self.frame['datetime'].apply(dt.timestamp).astype('int')
-        self.frame['Velocity_Major'] = self.frame['stamp'].apply(cs).round(2)
+        self.frame = pd.DataFrame({'Time': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
+        self.frame.stamp = self.frame.Time.apply(dt.timestamp).astype('int')
+        self.frame.Velocity_Major = self.frame.stamp.apply(cs).round(2)
 
 
 class SplineCSVFailed(Exception):
