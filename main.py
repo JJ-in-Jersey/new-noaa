@@ -113,10 +113,10 @@ if __name__ == '__main__':
             for wp in waypoints:
                 print(f'{wp.id} is missing downloaded velocity data')
 
-        # keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
-        for wp in waypoints:
-            job = RequestVelocityJob(args['year'], wp)
-            result = job.execute()
+        keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
+        # for wp in waypoints:
+        #     job = RequestVelocityJob(args['year'], wp)
+        #     result = job.execute()
         job_manager.wait()
         # for result in [job_manager.get_result(key) for key in keys]:
         #     if result is not None and result.path is not None:
