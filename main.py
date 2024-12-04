@@ -75,9 +75,9 @@ class CubicSplineVelocityFrame:
         end_date = dt.combine(pd.to_datetime(frame.Time.iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
         minutes = int((end_date - start_date).total_seconds()/60)
         self.frame = pd.DataFrame({'Time': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
+        self.frame['Time'] = self.frame.Time.apply(lambda x: pd.to_datetime(x, utc=True))
         self.frame['stamp'] = self.frame.Time.apply(dt.timestamp).astype('int')
         self.frame['Velocity_Major'] = self.frame.stamp.apply(cs).round(2)
-
 
 class SplineCSVFailed(Exception):
     def __init__(self, message: str):
@@ -113,16 +113,15 @@ if __name__ == '__main__':
             for wp in waypoints:
                 print(f'{wp.id} is missing downloaded velocity data')
 
-        keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
-        # for wp in waypoints:
-        #     job = RequestVelocityJob(args['year'], wp)
-        #     result = job.execute()
+        # keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
+        for wp in waypoints:
+            job = RequestVelocityJob(args['year'], wp)
+            result = job.execute()
         job_manager.wait()
-        for result in [job_manager.get_result(key) for key in keys]:
-            if result is not None and result.path is not None:
-                print_file_exists(result.path)
-                del result
-
+        # for result in [job_manager.get_result(key) for key in keys]:
+        #     if result is not None and result.path is not None:
+        #         print_file_exists(result.path)
+        #         del result
         for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
             wp.empty_folder()
         waypoints = [w for w in waypoint_dict.values() if not (w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
