@@ -22,7 +22,7 @@ class RequestVelocityCSV:
             if not sixteen_months.error:
                 write_df(sixteen_months.adj_frame, waypoint.adjusted_csv_path)
                 if waypoint.type == 'H':
-                    self.path = write_df(sixteen_months.adj_frame, waypoint.velocity_csv_path)
+                    self.path = write_df(sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy(), waypoint.velocity_csv_path)
                 del sixteen_months
             else:
                 raise sixteen_months.error
@@ -46,7 +46,7 @@ class SplineCSV:
         self.path = None
         frame = CubicSplineVelocityFrame(read_df(waypoint.adjusted_csv_path)).frame
         if print_file_exists(write_df(frame, waypoint.spline_csv_path)):
-            self.path = write_df(frame, waypoint.velocity_csv_path)
+            self.path = write_df(frame[['Time', 'stamp', 'Velocity_Major']].copy(), waypoint.velocity_csv_path)
 
 
 # noinspection PyShadowingNames
