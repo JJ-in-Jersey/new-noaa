@@ -105,8 +105,8 @@ if __name__ == '__main__':
     print(f'Requesting velocity data for each waypoint')
     for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
         wp.empty_folder()
-    waypoints = [w for w in waypoint_dict.values() if not (w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
 
+    waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -124,15 +124,15 @@ if __name__ == '__main__':
         #         del result
         for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
             wp.empty_folder()
-        waypoints = [w for w in waypoint_dict.values() if not (w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
+        waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
 
     print(f'Spline fitting subordinate waypoints')
-    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.spline_csv_path.exists()
-                             and not OneMonth.content_error(wp.folder)]
+    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not (wp.velocity_csv_path.exists()
+                             or wp.spline_csv_path.exists() or OneMonth.content_error(wp.folder))]
     keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
-    #     job = SplineJob(wp)
-    #     result = job.execute()
+        # job = SplineJob(wp)
+        # result = job.execute()
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in keys]:
         if result is not None:
