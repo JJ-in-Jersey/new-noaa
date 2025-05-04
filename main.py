@@ -79,6 +79,7 @@ class CubicSplineVelocityFrame:
         self.frame['stamp'] = self.frame.Time.apply(dt.timestamp).astype('int')
         self.frame['Velocity_Major'] = self.frame.stamp.apply(cs).round(2)
 
+
 class SplineCSVFailed(Exception):
     def __init__(self, message: str):
         self.message = message
@@ -131,8 +132,8 @@ if __name__ == '__main__':
                              or wp.spline_csv_path.exists() or OneMonth.content_error(wp.folder))]
     keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
-        # job = SplineJob(wp)
-        # result = job.execute()
+    # job = SplineJob(wp)
+    # result = job.execute()
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in keys]:
         if result is not None:
