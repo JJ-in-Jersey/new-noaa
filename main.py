@@ -4,13 +4,15 @@ from datetime import datetime as dt
 from dateutil.relativedelta import relativedelta
 from scipy.interpolate import CubicSpline
 import pandas as pd
+from os import remove
 
 from tt_globals.globals import PresetGlobals
 from tt_file_tools.file_tools import write_df, read_df, print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
-from tt_noaa_data.noaa_data import StationDict, SixteenMonths, NonMonotonic, DuplicateTimestamps, OneMonth
+from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
 from tt_gpx.gpx import Waypoint
-
+from tt_exceptions.exceptions import DuplicateTimestamps, NonMonotonic
+debug_flag = False
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
@@ -20,9 +22,10 @@ class RequestVelocityCSV:
         if not waypoint.adjusted_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
             if not sixteen_months.error:
-                write_df(sixteen_months.adj_frame, waypoint.adjusted_csv_path)
-                if waypoint.type == 'H':
+                if print_file_exists(write_df(sixteen_months.adj_frame, waypoint.adjusted_csv_path)) and waypoint.type == 'H':
                     self.path = write_df(sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy(), waypoint.velocity_csv_path)
+                    if print_file_exists(self.path) and not debug_flag:
+                        remove(waypoint.adjusted_csv_path)
                 del sixteen_months
             else:
                 raise sixteen_months.error
@@ -47,6 +50,9 @@ class SplineCSV:
         frame = CubicSplineVelocityFrame(read_df(waypoint.adjusted_csv_path)).frame
         if print_file_exists(write_df(frame, waypoint.spline_csv_path)):
             self.path = write_df(frame[['Time', 'stamp', 'Velocity_Major']].copy(), waypoint.velocity_csv_path)
+            if print_file_exists(self.path) and not debug_flag:
+                    remove(waypoint.adjusted_csv_path)
+                    remove(waypoint.spline_csv_path)
 
 
 # noinspection PyShadowingNames
