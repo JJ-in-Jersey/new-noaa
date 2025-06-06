@@ -3,16 +3,20 @@ from datetime import datetime as dt
 
 from dateutil.relativedelta import relativedelta
 from scipy.interpolate import CubicSpline
-import pandas as pd
+from pandas import to_datetime
 from os import remove
 
+from tt_dataframe.dataframe import DataFrame
 from tt_globals.globals import PresetGlobals
-from tt_file_tools.file_tools import write_df, read_df, print_file_exists
+from tt_file_tools.file_tools import print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
 from tt_gpx.gpx import Waypoint
 from tt_exceptions.exceptions import DuplicateTimestamps, NonMonotonic
+
 debug_flag = False
+timestep = 60  # 60 seconds, 1-minute intervals to match all downloaded data
+
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
@@ -22,8 +26,8 @@ class RequestVelocityCSV:
         if not waypoint.adjusted_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
             if not sixteen_months.error:
-                if print_file_exists(write_df(sixteen_months.adj_frame, waypoint.adjusted_csv_path)) and waypoint.type == 'H':
-                    self.path = write_df(sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy(), waypoint.velocity_csv_path)
+                if print_file_exists(sixteen_months.adj_frame.write(waypoint.adjusted_csv_path)) and waypoint.type == 'H':
+                    self.path = sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
                     if print_file_exists(self.path) and not debug_flag:
                         remove(waypoint.adjusted_csv_path)
                 del sixteen_months
@@ -47,9 +51,9 @@ class SplineCSV:
     def __init__(self, waypoint: Waypoint):
         self.id = waypoint.id
         self.path = None
-        frame = CubicSplineVelocityFrame(read_df(waypoint.adjusted_csv_path)).frame
-        if print_file_exists(write_df(frame, waypoint.spline_csv_path)):
-            self.path = write_df(frame[['Time', 'stamp', 'Velocity_Major']].copy(), waypoint.velocity_csv_path)
+        frame = CubicSplineVelocityFrame(DataFrame(csv_arg=waypoint.adjusted_csv_path)).frame
+        if print_file_exists(frame.write(waypoint.spline_csv_path)):
+            self.path = frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
             if print_file_exists(self.path) and not debug_flag:
                     remove(waypoint.adjusted_csv_path)
                     remove(waypoint.spline_csv_path)
@@ -68,7 +72,7 @@ class SplineJob(Job):  # super -> job name, result key, function/object, argumen
 
 
 class CubicSplineVelocityFrame:
-    def __init__(self, frame: pd.DataFrame):
+    def __init__(self, frame: DataFrame):
         self.frame = None
 
         if not frame.Time.is_unique:
@@ -77,11 +81,11 @@ class CubicSplineVelocityFrame:
             raise NonMonotonic(f'<!> Data not monotonic')
         cs = CubicSpline(frame.stamp, frame.Velocity_Major)
 
-        start_date = dt.combine(pd.to_datetime(frame.Time.iloc[0], utc=True).date(), dt.min.time())
-        end_date = dt.combine(pd.to_datetime(frame.Time.iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
-        minutes = int((end_date - start_date).total_seconds()/60)
-        self.frame = pd.DataFrame({'Time': [start_date + relativedelta(minutes=m) for m in range(0, minutes)]})
-        self.frame['Time'] = self.frame.Time.apply(lambda x: pd.to_datetime(x, utc=True))
+        start_date = dt.combine(to_datetime(frame.Time.iloc[0], utc=True).date(), dt.min.time())
+        end_date = dt.combine(to_datetime(frame.Time.iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
+        steps = int((end_date - start_date).total_seconds()/timestep)
+        self.frame = DataFrame(data={'Time': [start_date + relativedelta(minutes=m) for m in range(0, steps)]})
+        self.frame['Time'] = self.frame.Time.apply(lambda x: to_datetime(x, utc=True))
         self.frame['stamp'] = self.frame.Time.apply(dt.timestamp).astype('int')
         self.frame['Velocity_Major'] = self.frame.stamp.apply(cs).round(2)
 
