@@ -51,7 +51,7 @@ class SplineCSV:
     def __init__(self, waypoint: Waypoint):
         self.id = waypoint.id
         self.path = None
-        frame = CubicSplineVelocityFrame(DataFrame(csv_arg=waypoint.adjusted_csv_path)).frame
+        frame = CubicSplineVelocityFrame(DataFrame(csv_source=waypoint.adjusted_csv_path)).frame
         if print_file_exists(frame.write(waypoint.spline_csv_path)):
             self.path = frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
             if print_file_exists(self.path) and not debug_flag:
