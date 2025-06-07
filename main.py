@@ -47,7 +47,7 @@ class SplineCSV:
         stamp_step = 60  # timestamps in seconds so steps of one minute is 60
         input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
         cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
-        cs_frame['Time'] = cs_frame.stamp.apply(lambda x: to_datetime(cs_frame.stamp))
+        cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
 
         if print_file_exists(cs_frame.write(waypoint.spline_csv_path)):
             if print_file_exists(cs_frame.write(waypoint.velocity_csv_path)) and not debug_flag:
