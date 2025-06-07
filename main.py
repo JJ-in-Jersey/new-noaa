@@ -24,7 +24,6 @@ class RequestVelocityCSV:
                     self.path = sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
                     if print_file_exists(self.path) and not debug_flag:
                         remove(waypoint.adjusted_csv_path)
-                del sixteen_months
             else:
                 raise sixteen_months.error
 
@@ -48,6 +47,7 @@ class SplineCSV:
         input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
         cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
         cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
+        cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
 
         if print_file_exists(cs_frame.write(waypoint.spline_csv_path)):
             if print_file_exists(cs_frame.write(waypoint.velocity_csv_path)) and not debug_flag:
@@ -103,10 +103,13 @@ if __name__ == '__main__':
         # for result in [job_manager.get_result(key) for key in keys]:
         #     if result is not None and result.path is not None:
         #         print_file_exists(result.path)
-        #         del result
         for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
             wp.empty_folder()
         waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
+
+        for result in [job_manager.get_result(key) for key in keys]:
+            if result is not None:
+                print_file_exists(result.path)
 
     print(f'Spline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not (wp.velocity_csv_path.exists()
@@ -116,9 +119,9 @@ if __name__ == '__main__':
     #     job = SplineJob(wp)
     #     result = job.execute()
     job_manager.wait()
+
     for result in [job_manager.get_result(key) for key in keys]:
         if result is not None:
             print_file_exists(result.path)
-            del result
 
     job_manager.stop_queue()
