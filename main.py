@@ -1,8 +1,4 @@
 from argparse import ArgumentParser as argParser
-from datetime import datetime as dt
-
-from dateutil.relativedelta import relativedelta
-from scipy.interpolate import CubicSpline
 from pandas import to_datetime
 from os import remove
 
@@ -12,11 +8,9 @@ from tt_file_tools.file_tools import print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
 from tt_gpx.gpx import Waypoint
-from tt_exceptions.exceptions import DuplicateTimestamps, NonMonotonic
+from tt_interpolation.interpolation import CubicSplineFrame
 
 debug_flag = False
-timestep = 60  # 60 seconds, 1-minute intervals to match all downloaded data
-
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
@@ -49,14 +43,16 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
-        self.id = waypoint.id
-        self.path = None
-        frame = CubicSplineVelocityFrame(DataFrame(csv_source=waypoint.adjusted_csv_path)).frame
-        if print_file_exists(frame.write(waypoint.spline_csv_path)):
-            self.path = frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
-            if print_file_exists(self.path) and not debug_flag:
-                    remove(waypoint.adjusted_csv_path)
-                    remove(waypoint.spline_csv_path)
+
+        stamp_step = 60  # timestamps in seconds so steps of one minute is 60
+        input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
+        cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
+        cs_frame['Time'] = csframe.stamp.apply(lambda x: to_datetime(cs_frame.stamp))
+
+        if print_file_exists(cs_frame.write(waypoint.spline_csv_path)):
+            if print_file_exists(cs_frame.write(waypoint.velocity_csv_path)) and not debug_flag:
+                remove(waypoint.adjusted_csv_path)
+                remove(waypoint.spline_csv_path)
 
 
 # noinspection PyShadowingNames
@@ -69,31 +65,6 @@ class SplineJob(Job):  # super -> job name, result key, function/object, argumen
         result_key = id(waypoint.id)
         arguments = tuple([waypoint])
         super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments)
-
-
-class CubicSplineVelocityFrame:
-    def __init__(self, frame: DataFrame):
-        self.frame = None
-
-        if not frame.Time.is_unique:
-            raise DuplicateTimestamps(f'<!> Duplicate times')
-        if not frame.stamp.is_monotonic_increasing:
-            raise NonMonotonic(f'<!> Data not monotonic')
-        cs = CubicSpline(frame.stamp, frame.Velocity_Major)
-
-        start_date = dt.combine(to_datetime(frame.Time.iloc[0], utc=True).date(), dt.min.time())
-        end_date = dt.combine(to_datetime(frame.Time.iloc[-1], utc=True).date() + relativedelta(days=1), dt.min.time())
-        steps = int((end_date - start_date).total_seconds()/timestep)
-        self.frame = DataFrame(data={'Time': [start_date + relativedelta(minutes=m) for m in range(0, steps)]})
-        self.frame['Time'] = self.frame.Time.apply(lambda x: to_datetime(x, utc=True))
-        self.frame['stamp'] = self.frame.Time.apply(dt.timestamp).astype('int')
-        self.frame['Velocity_Major'] = self.frame.stamp.apply(cs).round(2)
-
-
-class SplineCSVFailed(Exception):
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(message)
 
 
 if __name__ == '__main__':
@@ -142,8 +113,8 @@ if __name__ == '__main__':
                              or wp.spline_csv_path.exists() or OneMonth.content_error(wp.folder))]
     keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
-    # job = SplineJob(wp)
-    # result = job.execute()
+    #     job = SplineJob(wp)
+    #     result = job.execute()
     job_manager.wait()
     for result in [job_manager.get_result(key) for key in keys]:
         if result is not None:
