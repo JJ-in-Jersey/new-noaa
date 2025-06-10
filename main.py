@@ -12,17 +12,21 @@ from tt_interpolation.interpolation import CubicSplineFrame
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
-        self.id = waypoint.id
-        self.path = None
+
+        if waypoint.type == "H":
+            self.path = waypoint.velocity_csv_path
+        else:
+            self.path = waypoint.adjusted_csv_path
 
         if not waypoint.adjusted_csv_path.exists():
             sixteen_months = SixteenMonths(year, waypoint)
             if not sixteen_months.error:
-                if print_file_exists(sixteen_months.adj_frame.write(waypoint.adjusted_csv_path)) and waypoint.type == 'H':
-                    self.path = sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
-                    if print_file_exists(self.path):
-                        remove(waypoint.adjusted_csv_path)
+                sixteen_months.adj_frame.write(waypoint.adjusted_csv_path)
+                if waypoint.type == 'H':
+                    sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
+                    remove(waypoint.adjusted_csv_path)
             else:
+                self.path = None
                 raise sixteen_months.error
 
 
@@ -41,16 +45,13 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
 
+        self.path = waypoint.velocity_csv_path
         stamp_step = 60  # timestamps in seconds so steps of one minute is 60
         input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
         cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
         cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
         cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
-
-        if print_file_exists(cs_frame.write(waypoint.spline_csv_path)):
-            if print_file_exists(cs_frame.write(waypoint.velocity_csv_path)):
-                remove(waypoint.adjusted_csv_path)
-                remove(waypoint.spline_csv_path)
+        cs_frame.write(waypoint.velocity_csv_path)
 
 
 # noinspection PyShadowingNames
@@ -91,7 +92,7 @@ if __name__ == '__main__':
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
             for wp in waypoints:
-                print(f'{wp.id} is missing downloaded velocity data')
+                print(f'{wp.id} is missing downloaded data')
 
         keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
         # for wp in waypoints:
