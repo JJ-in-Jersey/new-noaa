@@ -10,8 +10,6 @@ from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
 from tt_gpx.gpx import Waypoint
 from tt_interpolation.interpolation import CubicSplineFrame
 
-debug_flag = False
-
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
         self.id = waypoint.id
@@ -22,7 +20,7 @@ class RequestVelocityCSV:
             if not sixteen_months.error:
                 if print_file_exists(sixteen_months.adj_frame.write(waypoint.adjusted_csv_path)) and waypoint.type == 'H':
                     self.path = sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
-                    if print_file_exists(self.path) and not debug_flag:
+                    if print_file_exists(self.path):
                         remove(waypoint.adjusted_csv_path)
             else:
                 raise sixteen_months.error
@@ -50,7 +48,7 @@ class SplineCSV:
         cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
 
         if print_file_exists(cs_frame.write(waypoint.spline_csv_path)):
-            if print_file_exists(cs_frame.write(waypoint.velocity_csv_path)) and not debug_flag:
+            if print_file_exists(cs_frame.write(waypoint.velocity_csv_path)):
                 remove(waypoint.adjusted_csv_path)
                 remove(waypoint.spline_csv_path)
 
@@ -75,7 +73,7 @@ if __name__ == '__main__':
     PresetGlobals.make_folders()
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
-    station_dict = StationDict().dict
+    station_dict = StationDict()
     waypoint_dict = {key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')}
     for wp in waypoint_dict.values():
         wp.write_gpx()
