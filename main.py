@@ -52,6 +52,7 @@ class SplineCSV:
         cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
         cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
         cs_frame.write(waypoint.velocity_csv_path)
+        remove(waypoint.adjusted_csv_path)
 
 
 # noinspection PyShadowingNames
