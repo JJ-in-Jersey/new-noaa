@@ -1,9 +1,10 @@
 from argparse import ArgumentParser as argParser
 from pandas import to_datetime
 from os import remove
+from time import sleep
 
 from tt_dataframe.dataframe import DataFrame
-from tt_globals.globals import PresetGlobals
+from tt_globals.globals import PresetGlobals as pg
 from tt_file_tools.file_tools import print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
@@ -12,23 +13,24 @@ from tt_interpolation.interpolation import CubicSplineFrame
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
+        self.success = False
+        self.failure_message = None
 
         if waypoint.type == "H":
-            self.path = waypoint.velocity_csv_path
+            path = waypoint.velocity_csv_path
+        elif waypoint.type == 'S':
+            path = waypoint.adjusted_csv_path
         else:
-            self.path = waypoint.adjusted_csv_path
+            raise TypeError
 
-        if not waypoint.adjusted_csv_path.exists():
-            sixteen_months = SixteenMonths(year, waypoint)
-            if not sixteen_months.error:
-                sixteen_months.adj_frame.write(waypoint.adjusted_csv_path)
-                if waypoint.type == 'H':
-                    sixteen_months.adj_frame[['Time', 'stamp', 'Velocity_Major']].copy().write(waypoint.velocity_csv_path)
-                    remove(waypoint.adjusted_csv_path)
-            else:
-                self.path = None
-                raise sixteen_months.error
-
+        if not path.exists():
+            try:
+                sixteen_months = SixteenMonths(year, waypoint)
+                sixteen_months.write(path)
+                self.success = True
+            except Exception as e:
+                print(f'<!> {type(e).__name__} {waypoint.id}')
+                self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
 
 # noinspection PyShadowingNames
 class RequestVelocityJob(Job):  # super -> job name, result key, function/object, arguments
@@ -72,12 +74,12 @@ if __name__ == '__main__':
     ap.add_argument('year', type=int)
     args = vars(ap.parse_args())
 
-    PresetGlobals.make_folders()
+    pg.make_folders()
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
     station_dict = StationDict()
     waypoint_dict = {key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')}
-    for wp in waypoint_dict.values():
+    for wp in [wp for wp in waypoint_dict.values() if not pg.gpx_folder.joinpath(wp.id + '.gpx').exists()]:
         wp.write_gpx()
 
     # fire up the job manager
@@ -85,10 +87,8 @@ if __name__ == '__main__':
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
-    for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
-        wp.empty_folder()
-
-    waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
+    waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())
+                                                       and (w.type == 'H' or w.type == 'S')]
     while len(waypoints):
         print(f'Length of list: {len(waypoints)}')
         if len(waypoints) < 11:
@@ -100,16 +100,15 @@ if __name__ == '__main__':
         #     job = RequestVelocityJob(args['year'], wp)
         #     result = job.execute()
         job_manager.wait()
-        # for result in [job_manager.get_result(key) for key in keys]:
-        #     if result is not None and result.path is not None:
-        #         print_file_exists(result.path)
-        for wp in [w for w in waypoint_dict.values() if OneMonth.connection_error(w.folder)]:
-            wp.empty_folder()
-        waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists() or OneMonth.content_error(w.folder))]
 
-        for result in [job_manager.get_result(key) for key in keys]:
-            if result is not None:
-                print_file_exists(result.path)
+        results = [job_manager.get_result(key) for key in keys]
+        if len(results):
+            for result in results:
+                if not result.success:
+                    print(result.failure_message)
+            sleep(10)
+
+        waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())]
 
     print(f'Spline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not (wp.velocity_csv_path.exists()
