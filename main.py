@@ -10,9 +10,11 @@ from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
 from tt_gpx.gpx import Waypoint
 from tt_interpolation.interpolation import CubicSplineFrame
+from tt_exceptions.exceptions import SplineCSVFailed
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
+        self.id = waypoint.id
         self.success = False
         self.failure_message = None
 
@@ -46,6 +48,9 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
+        self.id in waypoint.id
+        self.success = False
+        self.failure_message = None
 
         self.path = waypoint.velocity_csv_path
         stamp_step = 60  # timestamps in seconds so steps of one minute is 60
@@ -54,7 +59,11 @@ class SplineCSV:
         cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
         cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
         cs_frame.write(waypoint.velocity_csv_path)
-        remove(waypoint.adjusted_csv_path)
+        if waypoint.velocity_csv_path.exists():
+            self.success = True
+            remove(waypoint.adjusted_csv_path)
+        else:
+            self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
 
 
 # noinspection PyShadowingNames
@@ -101,18 +110,16 @@ if __name__ == '__main__':
         #     result = job.execute()
         job_manager.wait()
 
-        results = [job_manager.get_result(key) for key in keys]
-        if len(results):
-            for result in results:
-                if not result.success:
-                    print(result.failure_message)
-            sleep(10)
-
-        waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())]
+        print(f'\nProcessing velocity data results')
+        for result in [r for r in [job_manager.get_result(key) for key in keys] if not r.success]:
+            yn = input(f'Exclude {result.failure_message} from StationDict processing? (y/n): ').lower()
+            if yn == 'y' or yn == 'yes':
+                station_dict.comment_waypoint(result.id)
+                waypoints.remove(waypoint_dict.pop(result.id))
 
     print(f'Spline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not (wp.velocity_csv_path.exists()
-                             or wp.spline_csv_path.exists() or OneMonth.content_error(wp.folder))]
+                             or wp.spline_csv_path.exists())]
     keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
     #     job = SplineJob(wp)
