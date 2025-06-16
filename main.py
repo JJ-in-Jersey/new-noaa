@@ -48,11 +48,10 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
-        self.id in waypoint.id
+        self.id = waypoint.id
         self.success = False
         self.failure_message = None
 
-        self.path = waypoint.velocity_csv_path
         stamp_step = 60  # timestamps in seconds so steps of one minute is 60
         input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
         cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
@@ -96,13 +95,13 @@ if __name__ == '__main__':
     # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
-    waypoints = [w for w in waypoint_dict.values() if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())
-                                                       and (w.type == 'H' or w.type == 'S')]
+    waypoints = [w for w in waypoint_dict.values()
+                 if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())
+                 and (w.type == 'H' or w.type == 'S')]
+
     while len(waypoints):
-        print(f'Length of list: {len(waypoints)}')
-        if len(waypoints) < 11:
-            for wp in waypoints:
-                print(f'{wp.id} is missing downloaded data')
+        print(f'\nLength of list: {len(waypoints)}')
+        sleep(5)
 
         keys = [job_manager.submit_job(RequestVelocityJob(args['year'], wp)) for wp in waypoints]
         # for wp in waypoints:
@@ -115,11 +114,14 @@ if __name__ == '__main__':
             yn = input(f'Exclude {result.failure_message} from StationDict processing? (y/n): ').lower()
             if yn == 'y' or yn == 'yes':
                 station_dict.comment_waypoint(result.id)
-                waypoints.remove(waypoint_dict.pop(result.id))
+                waypoint_dict.pop(result.id)
+
+        waypoints = [w for w in waypoint_dict.values()
+                     if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())
+                     and (w.type == 'H' or w.type == 'S')]
 
     print(f'Spline fitting subordinate waypoints')
-    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not (wp.velocity_csv_path.exists()
-                             or wp.spline_csv_path.exists())]
+    subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.velocity_csv_path.exists()]
     keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
     #     job = SplineJob(wp)
