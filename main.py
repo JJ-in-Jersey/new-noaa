@@ -52,16 +52,15 @@ class SplineCSV:
         self.success = False
         self.failure_message = None
 
-        stamp_step = 60  # timestamps in seconds so steps of one minute is 60
-        input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
-        cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
-        cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
-        cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
-        cs_frame.write(waypoint.velocity_csv_path)
-        if waypoint.velocity_csv_path.exists():
-            self.success = True
-            remove(waypoint.adjusted_csv_path)
-        else:
+        try:
+            stamp_step = 60  # timestamps in seconds so steps of one minute is 60
+            input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
+            cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
+            cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
+            cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
+            cs_frame.write(waypoint.velocity_csv_path)
+        except Exception as e:
+            print(f'<!> {type(e).__name__} {waypoint.id}')
             self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
 
 
@@ -128,8 +127,11 @@ if __name__ == '__main__':
     #     result = job.execute()
     job_manager.wait()
 
-    for result in [job_manager.get_result(key) for key in keys]:
-        if result is not None:
-            print_file_exists(result.path)
+    print(f'\nProcessing spline fitting results')
+    for result in [r for r in [job_manager.get_result(key) for key in keys] if not r.success]:
+        yn = input(f'Exclude {result.failure_message} from StationDict processing? (y/n): ').lower()
+        if yn == 'y' or yn == 'yes':
+            station_dict.comment_waypoint(result.id)
+            waypoint_dict.pop(result.id)
 
     job_manager.stop_queue()
