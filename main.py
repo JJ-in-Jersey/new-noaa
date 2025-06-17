@@ -15,8 +15,6 @@ from tt_exceptions.exceptions import SplineCSVFailed
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
         self.id = waypoint.id
-        self.success = False
-        self.failure_message = None
 
         if waypoint.type == "H":
             path = waypoint.velocity_csv_path
@@ -30,9 +28,12 @@ class RequestVelocityCSV:
                 sixteen_months = SixteenMonths(year, waypoint)
                 sixteen_months.write(path)
                 self.success = True
+                self.failure_message = None
             except Exception as e:
-                print(f'<!> {type(e).__name__} {waypoint.id}')
+                self.success = False
                 self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
+                print(self.failure_message)
+
 
 # noinspection PyShadowingNames
 class RequestVelocityJob(Job):  # super -> job name, result key, function/object, arguments
@@ -49,8 +50,6 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 class SplineCSV:
     def __init__(self, waypoint: Waypoint):
         self.id = waypoint.id
-        self.success = False
-        self.failure_message = None
 
         try:
             stamp_step = 60  # timestamps in seconds so steps of one minute is 60
@@ -59,9 +58,13 @@ class SplineCSV:
             cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
             cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
             cs_frame.write(waypoint.velocity_csv_path)
+            self.success = True
+            self.failure_message = None
         except Exception as e:
-            print(f'<!> {type(e).__name__} {waypoint.id}')
+            self.success = False
             self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
+            print(self.failure_message)
+
 
 
 # noinspection PyShadowingNames
@@ -119,7 +122,7 @@ if __name__ == '__main__':
                      if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())
                      and (w.type == 'H' or w.type == 'S')]
 
-    print(f'Spline fitting subordinate waypoints')
+    print(f'\nSpline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.velocity_csv_path.exists()]
     keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
