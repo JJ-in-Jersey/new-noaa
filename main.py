@@ -97,8 +97,8 @@ if __name__ == '__main__':
         wp.write_gpx()
 
     # fire up the job manager
-    # job_manager = JobManager()
-    job_manager = None
+    job_manager = JobManager()
+    # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [w for w in waypoint_dict.values()
