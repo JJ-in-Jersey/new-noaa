@@ -1,5 +1,5 @@
 from argparse import ArgumentParser as argParser
-from pandas import to_datetime
+from pandas import to_datetime, Timestamp
 from os import remove
 from time import sleep
 
@@ -48,13 +48,17 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
 
 
 class SplineCSV:
-    def __init__(self, waypoint: Waypoint):
+    def __init__(self, year: int, waypoint: Waypoint):
         self.id = waypoint.id
 
         try:
             stamp_step = 60  # timestamps in seconds so steps of one minute is 60
+            start_stamp = int(Timestamp(year=year - 1, month=11, day=1).timestamp())
+            end_stamp = int(Timestamp(year=year + 1, month=3, day=1).timestamp())
+            stamps = [start_stamp + i * stamp_step for i in range(int((end_stamp - start_stamp)/stamp_step))]
+
             input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
-            cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamp_step)
+            cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamps)
             cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
             cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
             cs_frame.write(waypoint.velocity_csv_path)
@@ -67,16 +71,15 @@ class SplineCSV:
             print(self.failure_message)
 
 
-
 # noinspection PyShadowingNames
 class SplineJob(Job):  # super -> job name, result key, function/object, arguments
     def execute(self): return super().execute()
     def execute_callback(self, result): return super().execute_callback(result)
     def error_callback(self, result): return super().error_callback(result)
 
-    def __init__(self, waypoint: Waypoint):
+    def __init__(self, year: int, waypoint: Waypoint):
         result_key = id(waypoint.id)
-        arguments = tuple([waypoint])
+        arguments = tuple([year, waypoint])
         super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments)
 
 
@@ -94,8 +97,8 @@ if __name__ == '__main__':
         wp.write_gpx()
 
     # fire up the job manager
-    job_manager = JobManager()
-    # job_manager = None
+    # job_manager = JobManager()
+    job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [w for w in waypoint_dict.values()
@@ -125,9 +128,9 @@ if __name__ == '__main__':
 
     print(f'\nSpline fitting subordinate waypoints')
     subordinate_waypoints = [wp for wp in waypoint_dict.values() if wp.type == 'S' and not wp.velocity_csv_path.exists()]
-    keys = [job_manager.submit_job(SplineJob(wp)) for wp in subordinate_waypoints]
+    keys = [job_manager.submit_job(SplineJob(args['year'], wp)) for wp in subordinate_waypoints]
     # for wp in subordinate_waypoints:
-    #     job = SplineJob(wp)
+    #     job = SplineJob(args['year'], wp)
     #     result = job.execute()
     job_manager.wait()
 
