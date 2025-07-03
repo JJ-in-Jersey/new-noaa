@@ -5,12 +5,11 @@ from time import sleep
 
 from tt_dataframe.dataframe import DataFrame
 from tt_globals.globals import PresetGlobals as pg
-from tt_file_tools.file_tools import print_file_exists
 from tt_job_manager.job_manager import JobManager, Job
-from tt_noaa_data.noaa_data import StationDict, SixteenMonths, OneMonth
+from tt_noaa_data.noaa_data import StationDict, SixteenMonths
 from tt_gpx.gpx import Waypoint
 from tt_interpolation.interpolation import CubicSplineFrame
-from tt_exceptions.exceptions import SplineCSVFailed
+
 
 class RequestVelocityCSV:
     def __init__(self, year: int, waypoint: Waypoint):
