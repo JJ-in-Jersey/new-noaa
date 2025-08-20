@@ -4,6 +4,7 @@ from os import remove
 from time import sleep
 
 from tt_dataframe.dataframe import DataFrame
+from tt_dictionary.dictionary import Dictionary
 from tt_globals.globals import PresetGlobals as pg
 from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths
@@ -90,7 +91,7 @@ if __name__ == '__main__':
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
     station_dict = StationDict()
-    waypoint_dict = {key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')}
+    waypoint_dict = Dictionary({key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')})
     for wp in [wp for wp in waypoint_dict.values() if not pg.gpx_folder.joinpath(wp.id + '.gpx').exists()]:
         wp.write_gpx()
 
