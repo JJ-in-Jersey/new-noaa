@@ -87,6 +87,12 @@ if __name__ == '__main__':
     ap.add_argument('year', type=int)
     args = vars(ap.parse_args())
 
+    waypoint_template = pg.templates_folder.joinpath('waypoint_template.gpx')
+
+    if not waypoint_template.exists():
+        print(f'\n**   {waypoint_template} not found.\n')
+        exit(1)
+
     pg.make_folders()
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
