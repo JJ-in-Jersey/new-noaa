@@ -4,7 +4,7 @@ from os import remove
 
 from tt_dataframe.dataframe import DataFrame
 from tt_dictionary.dictionary import Dictionary
-from tt_globals.globals import PresetGlobals
+import tt_globals.globals as Globals
 from tt_job_manager.job_manager import JobManager, Job
 from tt_noaa_data.noaa_data import StationDict, SixteenMonths
 from tt_gpx.gpx import Waypoint
@@ -86,21 +86,21 @@ if __name__ == '__main__':
     ap.add_argument('year', type=int)
     args = vars(ap.parse_args())
 
-    waypoint_template = PresetGlobals.templates_folder.joinpath('waypoint_template.gpx')
+    waypoint_template = Globals.TEMPLATES_FOLDER.joinpath('waypoint_template.gpx')
 
     if not waypoint_template.exists():
         print(f'\n**   {waypoint_template} not found.\n')
         exit(1)
 
-    PresetGlobals.make_folders()
+    Globals.make_project_folders()
 
     print(f'Creating all the NOAA waypoint folders and gpx files')
-    if PresetGlobals.stations_file.exists():
-        station_dict = StationDict(json_source=PresetGlobals.stations_file)
+    if Globals.STATIONS_FILE.exists():
+        station_dict = StationDict(json_source=Globals.STATIONS_FILE)
     else:
         station_dict = StationDict()
     waypoint_dict = Dictionary({key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')})
-    for wp in [wp for wp in waypoint_dict.values() if not PresetGlobals.gpx_folder.joinpath(wp.id + '.gpx').exists()]:
+    for wp in [wp for wp in waypoint_dict.values() if not Globals.GPX_FOLDER.joinpath(wp.id + '.gpx').exists()]:
         wp.write_gpx()
 
     # fire up the job manager
