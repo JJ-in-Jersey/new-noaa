@@ -1,6 +1,7 @@
 from argparse import ArgumentParser as argParser
-from pandas import to_datetime, Timestamp
+from pandas import to_datetime
 from os import remove
+from datetime import datetime
 
 from tt_dataframe.dataframe import DataFrame
 from tt_dictionary.dictionary import Dictionary
@@ -42,7 +43,7 @@ class RequestVelocityJob(Job):  # super -> job name, result key, function/object
     def __init__(self, year, waypoint: Waypoint):
         result_key = id(waypoint)
         arguments = tuple([year, waypoint])
-        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, RequestVelocityCSV, arguments)
+        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, RequestVelocityCSV, arguments, {})
 
 
 class SplineCSV:
@@ -51,8 +52,8 @@ class SplineCSV:
 
         try:
             stamp_step = 60  # timestamps in seconds so steps of one minute is 60
-            start_stamp = int(Timestamp(year=year - 1, month=11, day=1).timestamp())
-            end_stamp = int(Timestamp(year=year + 1, month=3, day=1).timestamp())
+            start_stamp = int(datetime(year=year - 1, month=11, day=1).timestamp())
+            end_stamp = int(datetime(year=year + 1, month=3, day=1).timestamp())
             stamps = [start_stamp + i * stamp_step for i in range(int((end_stamp - start_stamp)/stamp_step))]
 
             input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
@@ -78,7 +79,7 @@ class SplineJob(Job):  # super -> job name, result key, function/object, argumen
     def __init__(self, year: int, waypoint: Waypoint):
         result_key = id(waypoint.id)
         arguments = tuple([year, waypoint])
-        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments)
+        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments, {})
 
 
 if __name__ == '__main__':
