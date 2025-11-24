@@ -1,85 +1,78 @@
 from argparse import ArgumentParser as argParser
-from pandas import to_datetime
-from os import remove
-from datetime import datetime
 
-from tt_dataframe.dataframe import DataFrame
 from tt_dictionary.dictionary import Dictionary
 import tt_globals.globals as Globals
-from tt_job_manager.job_manager import JobManager, Job
-from tt_noaa_data.noaa_data import StationDict, SixteenMonths
+from tt_job_manager.job_manager import JobManager
+from tt_jobs.jobs import RequestVelocityJob, SplineJob
+from tt_noaa_data.noaa_data import StationDict
 from tt_gpx.gpx import Waypoint
-from tt_interpolation.interpolation import CubicSplineFrame
 
-class RequestVelocityCSV:
-    def __init__(self, year: int, waypoint: Waypoint):
-        self.id = waypoint.id
+# class RequestVelocityCSV:
+#     def __init__(self, year: int, waypoint: Waypoint):
+#         self.id = waypoint.id
+#
+#         if waypoint.type == "H":
+#             path = waypoint.velocity_csv_path
+#         elif waypoint.type == 'S':
+#             path = waypoint.adjusted_csv_path
+#         else:
+#             raise TypeError
+#
+#         if not path.exists():
+#             try:
+#                 sixteen_months = SixteenMonths(year, waypoint)
+#                 sixteen_months.write(path)
+#                 self.success = True
+#                 self.failure_message = None
+#             except Exception as e:
+#                 self.success = False
+#                 self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
+#                 print(self.failure_message)
+#
+#
+# # noinspection PyShadowingNames
+# class RequestVelocityJob(Job):  # super -> job name, result key, function/object, arguments
+#     def execute(self): return super().execute()
+#     def execute_callback(self, result): return super().execute_callback(result)
+#     def error_callback(self, result): return super().error_callback(result)
+#
+#     def __init__(self, year, waypoint: Waypoint):
+#         result_key = id(waypoint)
+#         arguments = tuple([year, waypoint])
+#         super().__init__(waypoint.id + ' ' + waypoint.name, result_key, RequestVelocityCSV, arguments, {})
 
-        if waypoint.type == "H":
-            path = waypoint.velocity_csv_path
-        elif waypoint.type == 'S':
-            path = waypoint.adjusted_csv_path
-        else:
-            raise TypeError
-
-        if not path.exists():
-            try:
-                sixteen_months = SixteenMonths(year, waypoint)
-                sixteen_months.write(path)
-                self.success = True
-                self.failure_message = None
-            except Exception as e:
-                self.success = False
-                self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
-                print(self.failure_message)
-
-
-# noinspection PyShadowingNames
-class RequestVelocityJob(Job):  # super -> job name, result key, function/object, arguments
-    def execute(self): return super().execute()
-    def execute_callback(self, result): return super().execute_callback(result)
-    def error_callback(self, result): return super().error_callback(result)
-
-    def __init__(self, year, waypoint: Waypoint):
-        result_key = id(waypoint)
-        arguments = tuple([year, waypoint])
-        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, RequestVelocityCSV, arguments, {})
-
-
-class SplineCSV:
-    def __init__(self, year: int, waypoint: Waypoint):
-        self.id = waypoint.id
-
-        try:
-            stamp_step = 60  # timestamps in seconds so steps of one minute is 60
-            start_stamp = int(datetime(year=year - 1, month=11, day=1).timestamp())
-            end_stamp = int(datetime(year=year + 1, month=3, day=1).timestamp())
-            stamps = [start_stamp + i * stamp_step for i in range(int((end_stamp - start_stamp)/stamp_step))]
-
-            input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
-            cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamps)
-            cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
-            cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
-            cs_frame.write(waypoint.velocity_csv_path)
-            remove(waypoint.adjusted_csv_path)
-            self.success = True
-            self.failure_message = None
-        except Exception as e:
-            self.success = False
-            self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
-            print(self.failure_message)
-
-
-# noinspection PyShadowingNames
-class SplineJob(Job):  # super -> job name, result key, function/object, arguments
-    def execute(self): return super().execute()
-    def execute_callback(self, result): return super().execute_callback(result)
-    def error_callback(self, result): return super().error_callback(result)
-
-    def __init__(self, year: int, waypoint: Waypoint):
-        result_key = id(waypoint.id)
-        arguments = tuple([year, waypoint])
-        super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments, {})
+# class SplineCSV:
+#     def __init__(self, year: int, waypoint: Waypoint):
+#         self.id = waypoint.id
+#
+#         try:
+#             stamp_step = 60  # timestamps in seconds so steps of one minute is 60
+#             start_stamp = int(datetime(year=year - 1, month=11, day=1).timestamp())
+#             end_stamp = int(datetime(year=year + 1, month=3, day=1).timestamp())
+#             stamps = [start_stamp + i * stamp_step for i in range(int((end_stamp - start_stamp)/stamp_step))]
+#
+#             input_frame = DataFrame(csv_source=waypoint.adjusted_csv_path)
+#             cs_frame = CubicSplineFrame(input_frame.stamp, input_frame.Velocity_Major, stamps)
+#             cs_frame['Time'] = to_datetime(cs_frame.stamp, unit='s').dt.tz_localize('UTC')
+#             cs_frame['Velocity_Major'] = cs_frame.Velocity_Major.round(2)
+#             cs_frame.write(waypoint.velocity_csv_path)
+#             remove(waypoint.adjusted_csv_path)
+#             self.success = True
+#             self.failure_message = None
+#         except Exception as e:
+#             self.success = False
+#             self.failure_message = f'<!> {waypoint.id} {type(e).__name__}'
+#             print(self.failure_message)
+#
+# class SplineJob(Job):  # super -> job name, result key, function/object, arguments
+#     def execute(self): return super().execute()
+#     def execute_callback(self, result): return super().execute_callback(result)
+#     def error_callback(self, result): return super().error_callback(result)
+#
+#     def __init__(self, year: int, waypoint: Waypoint):
+#         result_key = id(waypoint.id)
+#         arguments = tuple([year, waypoint])
+#         super().__init__(waypoint.id + ' ' + waypoint.name, result_key, SplineCSV, arguments, {})
 
 
 if __name__ == '__main__':
@@ -123,11 +116,13 @@ if __name__ == '__main__':
         job_manager.wait()
 
         print(f'\nProcessing velocity data results')
-        for result in [r for r in [job_manager.get_result(key) for key in keys] if not r.success]:
-            yn = input(f'Exclude {result.failure_message} from StationDict processing? (y/n): ').lower()
+        results_dict = {wp_id: job_manager.get_result(wp_id) for wp_id in keys}
+        error_dict = {k: v for k, v in results_dict.items() if isinstance(v, Exception)}
+        for wp_id, result in error_dict.items():
+            yn = input(f'Exclude {result.__class__.__name__} {wp_id} from StationDict processing? (y/n): ').lower()
             if yn == 'y' or yn == 'yes':
-                station_dict.comment_waypoint(result.id)
-                waypoint_dict.pop(result.id)
+                station_dict.comment_waypoint(wp_id)
+                waypoint_dict.pop(wp_id)
 
         waypoints = [w for w in waypoint_dict.values()
                      if not (w.velocity_csv_path.exists() or w.adjusted_csv_path.exists())
