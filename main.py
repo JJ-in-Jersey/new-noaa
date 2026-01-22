@@ -48,7 +48,7 @@ if __name__ == '__main__':
         success_dict = {k: v for k, v in results_dict.items() if isinstance(v, RequestVelocityFrame)}
         error_dict = {k: v for k, v in results_dict.items() if isinstance(v, Exception)}
         for wp_id, result in error_dict.items():
-            if result.__class__.__name__ == 'NonMonotonic' or result.__class__.__name__ == 'DuplicateValues':
+            if result.__class__.__name__ == 'NonMonotonic' or result.__class__.__name__ == 'DuplicateValues' or result.__class__.__name__ == 'PredictionsNotAvailable':
                 station_dict.comment_waypoint(wp_id)
                 waypoint_dict.pop(wp_id)
             else:
