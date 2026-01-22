@@ -22,19 +22,14 @@ if __name__ == '__main__':
 
     Globals.make_project_folders()
 
+    job_manager = JobManager()
+
     print(f'Creating all the NOAA waypoint folders and gpx files')
-    if Globals.STATIONS_FILE.exists():
-        station_dict = StationDict(json_source=Globals.STATIONS_FILE)
-    else:
-        station_dict = StationDict()
+    station_dict = StationDict(job_manager)
 
     waypoint_dict = Dictionary({key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')})
     for wp in [wp for wp in waypoint_dict.values() if not Globals.GPX_FOLDER.joinpath(wp.id + '.gpx').exists()]:
         wp.write_gpx()
-
-    # fire up the job manager
-    job_manager = JobManager()
-    # job_manager = None
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [w for w in waypoint_dict.values() if not w.raw_csv_path.exists() and (w.type == 'H' or w.type == 'S')]
