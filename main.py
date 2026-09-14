@@ -35,9 +35,8 @@ if __name__ == '__main__':
     # create a gpx file containing all the waypoints
     concatenated_waypoints = "\n".join([wp.create_wpt_xml() for wp in waypoint_dict.values()])
     file_content = f"{GpxFile.gpx_header}\n{concatenated_waypoints}{GpxFile.gpx_footer}"
-    with open(Globals.GPX_FOLDER.joinpath(str(args['year']) + '.gpx'), 'w') as a_file:
+    with open(Globals.STATIONS_FOLDER.joinpath(str(args['year']) + '.gpx'), 'w') as a_file:
         a_file.write(file_content)
-
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [w for w in waypoint_dict.values() if not w.raw_csv_path.exists() and (w.type == 'H' or w.type == 'S')]
