@@ -7,7 +7,7 @@ import tt_globals.globals as Globals
 from tt_job_manager.job_manager import JobManager
 from tt_jobs.jobs import RequestVelocityJob, SplineJob, RequestVelocityFrame, SplineFrame
 from tt_noaa_data.noaa_data import StationDict
-from tt_gpx.gpx import Waypoint
+from tt_gpx.gpx import Waypoint, GpxFile
 
 if __name__ == '__main__':
     ap = argParser()
@@ -28,8 +28,16 @@ if __name__ == '__main__':
     station_dict = StationDict(job_manager)
 
     waypoint_dict = Dictionary({key: Waypoint(station_dict[key]) for key in station_dict.keys() if not ('#' in key or station_dict[key]['type'] == 'W')})
+    # for each waypoint create a gpx file
     for wp in [wp for wp in waypoint_dict.values() if not Globals.GPX_FOLDER.joinpath(wp.id + '.gpx').exists()]:
-        wp.write_gpx()
+        wp.write_wpt_gpx()
+
+    # create a gpx file containing all the waypoints
+    concatenated_waypoints = "\n".join([wp.create_wpt_xml() for wp in waypoint_dict.values()])
+    file_content = f"{GpxFile.gpx_header}\n{concatenated_waypoints}{GpxFile.gpx_footer}"
+    with open(Globals.GPX_FOLDER.joinpath(str(args['year']) + '.gpx'), 'w') as a_file:
+        a_file.write(file_content)
+
 
     print(f'Requesting velocity data for each waypoint')
     waypoints = [w for w in waypoint_dict.values() if not w.raw_csv_path.exists() and (w.type == 'H' or w.type == 'S')]
